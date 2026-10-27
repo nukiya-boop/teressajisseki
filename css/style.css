@@ -95,6 +95,9 @@ td.items { white-space: normal; min-width: 160px; }
 td.comment { white-space: normal; min-width: 280px; max-width: 420px; font-size: 13px; }
 
 
+.staff { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+.staff textarea { width: 100%; font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+#buffer, #maxHours { width: 56px; }
 .docs { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
 .docs.over { outline: 2px dashed var(--accent); }
 .log { margin: 0; padding-left: 18px; font-size: 12px; max-height: 220px; overflow: auto; }

@@ -115,7 +115,7 @@ export function parseTeikyo(items) {
 
 export function parseDays(text) {
   const t = String(text ?? '').replace(/\s+/g, '');
-  if (!t || /毎日/.test(t)) return [0, 1, 2, 3, 4, 5, 6];
+  if (!t || /毎日/.test(t) || parseDates(t)) return [0, 1, 2, 3, 4, 5, 6];
   const range = /([日月火水木金土])[～〜~\-ー]([日月火水木金土])/.exec(t);
   if (range) {
     const out = [];
@@ -125,6 +125,38 @@ export function parseDays(text) {
   return [...new Set([...t].map(c => WD.indexOf(c)).filter(i => i >= 0))].sort();
 }
 
+// 「1日〜6日のみ」「5日・25日・29日のみ」のような日付指定を、日にちの配列にする（曜日指定なら null）
+export function parseDates(text) {
+  const t = String(text ?? '').replace(/\s+/g, '');
+  if (!/\d+日/.test(t)) return null;
+  const out = new Set();
+  for (const m of t.matchAll(/(\d+)日(?:[～〜~\-ー](\d+)日)?/g)) {
+    const a = Number(m[1]), b = Number(m[2] ?? m[1]);
+    for (let d = a; d <= b; d++) out.add(d);
+  }
+  return [...out].sort((x, y) => x - y);
+}
+
+// 見出しが「曜」「日」のように分かれていても、行の中での位置（左端・右端）を返す。
+function span(line, label) {
+  let text = '';
+  const parts = [];
+  for (const it of line.items) {
+    const str = it.str.replace(/\s/g, '');
+    parts.push({ it, from: text.length, len: str.length });
+    text += str;
+  }
+  const i = text.indexOf(label);
+  if (i < 0) return null;
+  const at = k => {
+    const p = parts.find(p => k >= p.from && k < p.from + p.len) ?? parts.at(-1);
+    return p.it.x + ((k - p.from) / Math.max(p.len, 1)) * p.it.w;
+  };
+  return { x0: at(i), x1: at(i + label.length - 1) + (at(i + label.length - 1) - at(i)) / Math.max(label.length - 1, 1) };
+}
+
+const compact = l => l.text.replace(/\s/g, '');
+
 // 1つの PDF に複数の作成日の版があれば、版ごとに訪問枠と援助内容を返す。
 export function parseHomeCarePlan(pages) {
   const versions = [];
@@ -133,7 +165,8 @@ export function parseHomeCarePlan(pages) {
   for (const items of pages) {
     const lines = toLines(items);
     const all = lines.map(l => l.text).join('\n');
-    const made = /作成日\s*：?\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/.exec(all);
+    const flat = lines.map(compact).join('\n');
+    const made = /作成日：?令和(\d+)年(\d+)月(\d+)日/.exec(flat);
     if (made) {
       current = { date: `${wareki(made[1])}-${pad(made[2])}-${pad(made[3])}`, slots: [] };
       versions.push(current);
@@ -141,36 +174,41 @@ export function parseHomeCarePlan(pages) {
       const nm = /氏名\s*(.+?)\s*様/.exec(all);
       if (nm) name = nm[1].trim();
     }
-    if (!all.includes('週間サービス計画表')) continue;
+    if (!flat.includes('週間サービス計画表')) continue;
     if (!current) { current = { date: '', slots: [] }; versions.push(current); }
 
-    const header = lines.find(l => l.text.includes('時間帯') && l.text.includes('曜日'));
-    const col = s => header?.items.find(it => it.str.includes(s))?.x ?? 0;
-    const xTime = col('時間帯') - 15, xDay = col('曜日') - 6, xKind = col('サービス区分') - 10, xIns = col('保険内外') - 5;
-    const firstContent = lines.find(l => l.text.includes('サービス内容（'))?.y ?? Infinity;
-    for (const l of lines.filter(l => l.y > (header?.y ?? 0) && l.y < firstContent)) {
-      const pick = (x0, x1) => l.items.filter(it => it.x >= x0 && it.x < x1).map(it => it.str).join('').trim();
-      const no = pick(0, xTime), time = pick(xTime, xDay), days = pick(xDay, xKind), kind = pick(xKind, xIns);
-      const m = /(\d{1,2}:\d{2})[～〜~-](\d{1,2}:\d{2})/.exec(time);
-      if (!/^\d+$/.test(no) || !m) continue;
-      current.slots.push({ no: Number(no), start: m[1], end: m[2], dayText: days, days: parseDays(days), service: kind, content: '', items: [] });
+    const header = lines.find(l => compact(l).includes('時間帯') && compact(l).includes('曜日'));
+    if (!header) continue;
+    const no = span(header, 'No'), time = span(header, '時間帯'), day = span(header, '曜日');
+    const kind = span(header, 'サービス区分'), ins = span(header, '保険内外');
+    // 列の境目は、隣り合う見出しのあいだ
+    const b0 = no ? no.x1 + 3 : time.x0 - 15;
+    const b1 = (time.x1 + day.x0) / 2, b2 = (day.x1 + kind.x0) / 2, b3 = ins ? (kind.x1 + ins.x0) / 2 : kind.x1 + 20;
+    const firstContent = lines.find(l => compact(l).includes('サービス内容（'))?.y ?? Infinity;
+    for (const l of lines.filter(l => l.y > header.y && l.y < firstContent)) {
+      const pick = (x0, x1) => l.items.filter(it => it.x >= x0 && it.x < x1).map(it => it.str).join('').replace(/\s/g, '');
+      const n = pick(0, b0), t = pick(b0, b1), days = pick(b1, b2), svc = pick(b2, b3);
+      const m = /(\d{1,2}:\d{2})[～〜~-](\d{1,2}:\d{2})/.exec(t);
+      if (!/^\d+$/.test(n) || !m) continue;
+      current.slots.push({ no: Number(n), start: m[1], end: m[2], dayText: days, days: parseDays(days), dates: parseDates(days), service: svc, content: '', items: [] });
     }
 
     // サービス内容（No.n）：具体的内容の欄だけを読む
-    const sections = lines.filter(l => /サービス内容（\s*No\.?\s*\d+/.test(l.text.replace(/\s/g, '')));
+    const sections = lines.filter(l => /サービス内容（No\.?\d+/.test(compact(l)));
     sections.forEach((sec, i) => {
-      const no = Number(/No\.?(\d+)/.exec(sec.text.replace(/\s/g, ''))[1]);
+      const no = Number(/No\.?(\d+)/.exec(compact(sec))[1]);
       const slot = current.slots.find(s => s.no === no);
       if (!slot) return;
-      const end = sections[i + 1]?.y ?? (lines.find(l => l.y > sec.y && l.text.includes('特記事項'))?.y ?? Infinity);
-      const head = lines.find(l => l.y > sec.y && l.y < end && l.text.includes('所要時間'));
+      const end = sections[i + 1]?.y ?? (lines.find(l => l.y > sec.y && compact(l).includes('特記事項'))?.y ?? Infinity);
+      const head = lines.find(l => l.y > sec.y && l.y < end && compact(l).includes('所要時間'));
       if (!head) return;
-      const kindX = head.items.find(it => it.str.includes('サービス区分'));
-      const x0 = kindX ? kindX.x + kindX.w + 10 : 0;
-      const x1 = head.items.find(it => it.str.includes('所要時間')).x - 5;
+      const k = span(head, 'サービス区分'), dur = span(head, '所要時間');
+      const x0 = k ? k.x1 + 10 : 0;
+      const x1 = dur.x0 - 5;
       slot.content = lines.filter(l => l.y > head.y && l.y < end)
         .map(l => l.items.filter(it => it.x >= x0 && it.x < x1).map(it => it.str).join(''))
-        .join('').replace(/頻度：[^）)]*[）)]/g, '').trim();
+        .join('').replace(/\s/g, '')
+        .replace(/頻度：[^（(]*[（(][\d:～〜~\-]*[）)]?/g, '').replace(/^[\d:～〜~\-]*[）)]/, '').trim();
       slot.items = detectItems(slot.content);
     });
   }

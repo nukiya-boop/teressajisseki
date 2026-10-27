@@ -3,13 +3,14 @@ import { ALIASES, STATUS, reconcile, confirmPlanned, summarize } from './logic.j
 import { ITEMS, CARE_LEVELS, WEEKDAYS, detectProfile, resolveItems, generateComment, slotKey } from './record.js';
 import { readDocument, normalizeName } from './pdfimport.js';
 import { recordCard } from './form.js';
+import { parseStaff, assignStaff } from './assign.js';
 
 const STORE_KEY = 'teressajisseki:v1';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 const JSZIP = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
 const VISIT_CARE = /身体|生活|通院|乗降/;
 
-const state = load();
+const state = await load();
 let rows = [];
 let openKey = null;
 let editSlot = null;
@@ -18,9 +19,31 @@ const $ = sel => document.querySelector(sel);
 const monthInput = $('#month');
 monthInput.value = state.month || new Date().toISOString().slice(0, 7);
 $('#office').value = state.office ?? '';
+$('#staffText').value = state.staffText ?? '';
+$('#buffer').value = state.buffer ?? 10;
+$('#maxHours').value = state.maxHours ?? 10;
 
-function load() {
+// 利用者が多いと localStorage（約5MB）に収まらないため、IndexedDB に保存する
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(STORE_KEY, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function load() {
   const empty = { careplan: [], shift: [], actual: [], profiles: {}, records: {} };
+  try {
+    const db = await openDb();
+    const saved = await new Promise((resolve, reject) => {
+      const req = db.transaction('kv').objectStore('kv').get('state');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    if (saved) return { ...empty, ...saved };
+  } catch { /* IndexedDB が使えなければ localStorage を見る */ }
   try {
     return { ...empty, ...JSON.parse(localStorage.getItem(STORE_KEY)) };
   } catch {
@@ -28,8 +51,18 @@ function load() {
   }
 }
 
+let saveTimer = null;
 function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* 保存できなくても表示は続ける */ }
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      const db = await openDb();
+      db.transaction('kv', 'readwrite').objectStore('kv').put(JSON.parse(JSON.stringify(state)), 'state');
+      localStorage.removeItem(STORE_KEY);
+    } catch {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* 保存できなくても表示は続ける */ }
+    }
+  }, 300);
 }
 
 // ---- CSV 取り込み ----
@@ -466,6 +499,7 @@ function render() {
     (slotDays[k] ??= new Set()).add(new Date(`${r.date}T00:00:00`).getDay());
   }
   rows = base.map(r => withRecord(r, slotCounts, slotDays, weeks));
+  assignHelpers(rows);
 
   const counts = summarize(rows);
   $('#summary').innerHTML = Object.entries(counts)
@@ -476,8 +510,54 @@ function render() {
   fillSelect($('#statusFilter'), Object.values(STATUS).map(s => [s, s]), true);
   fillSelect(profileUser, Object.keys(state.profiles).map(id => [id, names[id]]), false);
   drawProfile();
+  drawStaff();
   draw();
 }
+
+// シフト・実績・手入力で担当者が決まっていない訪問に、ヘルパーを自動で割り当てる
+let staffLoad = null;
+function assignHelpers(list) {
+  const staff = parseStaff(state.staffText);
+  staffLoad = null;
+  if (!staff.length) return;
+  const fixed = {};
+  const visits = [];
+  for (const r of list) {
+    const manual = state.records[r.key]?.staff;
+    if (manual) r.staff = manual;
+    if (r.staff) fixed[r.key] = r.staff;
+    visits.push({ key: r.key, date: r.date, start: r.actualStart || r.planStart, end: r.actualEnd || r.planEnd, userId: r.userId, slot: `${r.userId}|${slotKey(r.planStart || r.actualStart, r.service)}` });
+  }
+  const result = assignStaff(visits, staff, {
+    buffer: Number(state.buffer ?? 10), maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
+  });
+  for (const r of list) {
+    if (!r.staff && result.assign[r.key]) { r.staff = result.assign[r.key]; r.staffAuto = true; }
+  }
+  staffLoad = { ...result, staff };
+}
+
+function drawStaff() {
+  const box = $('#staffLoad');
+  if (!staffLoad) { box.innerHTML = ''; $('#staffStatus').textContent = ''; return; }
+  const { load, unassigned, staff } = staffLoad;
+  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て、${unassigned.length}件は空いているヘルパーがいないため空欄`;
+  const [y, m] = monthInput.value.split('-').map(Number);
+  const first = `${monthInput.value}-01`, last = `${monthInput.value}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  const shown = staff.filter(p => p.from <= last && (!p.to || p.to >= first));
+  box.innerHTML = `<table class="slots"><thead><tr><th>ヘルパー</th><th>在籍</th><th>担当件数</th><th>時間</th></tr></thead><tbody>
+    ${shown.map(p => `<tr><td>${esc(p.name)}</td><td class="hint">${p.from}〜${p.to || '現在'}</td>
+      <td>${load[p.name]?.visits ?? 0}件</td><td>${((load[p.name]?.minutes ?? 0) / 60).toFixed(1)}時間</td></tr>`).join('')}
+  </tbody></table>`;
+}
+
+$('#applyStaff').addEventListener('click', () => {
+  state.staffText = $('#staffText').value;
+  state.buffer = $('#buffer').value;
+  state.maxHours = $('#maxHours').value;
+  save();
+  render();
+});
 
 function fillSelect(sel, entries, withAll) {
   const current = sel.value;
@@ -519,6 +599,8 @@ function detailRow(r) {
     <div class="row">
       <button data-d="regen" class="secondary">コメント再生成</button>
       <button data-d="reset" class="secondary">レ点を計画書どおりに戻す</button>
+      <label>担当ヘルパー <input data-d="staff" value="${esc(r.staff)}" list="staffNames" size="14">${r.staffAuto ? '<span class="hint">（自動）</span>' : ''}</label>
+      <datalist id="staffNames">${parseStaff(state.staffText).map(p => `<option value="${esc(p.name)}">`).join('')}</datalist>
       <label><input type="checkbox" data-d="confirmed" ${r.confirmed ? 'checked' : ''}> 記録内容を確認した</label>
     </div>
   </td></tr>`;
@@ -550,6 +632,8 @@ $('#rows').addEventListener('change', e => {
     updateRecord(openKey, { items, comment: undefined, confirmed: false });
   } else if (d === 'comment') {
     updateRecord(openKey, { comment: e.target.value });
+  } else if (d === 'staff') {
+    updateRecord(openKey, { staff: e.target.value.trim() || undefined });
   } else if (d === 'confirmed') {
     updateRecord(openKey, { confirmed: e.target.checked });
   }

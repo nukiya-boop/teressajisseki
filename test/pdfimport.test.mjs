@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTeikyo, parseHomeCarePlan, parseAssessment, parseDays, classifyPage } from '../js/pdfimport.js';
+import { parseTeikyo, parseHomeCarePlan, parseAssessment, parseDays, parseDates, classifyPage } from '../js/pdfimport.js';
 
 // pdf.js から取り出した形の文字片（架空の利用者）
 const it = (x, y, str, w = str.length * 9) => ({ x, y, str, w });
@@ -46,6 +46,10 @@ test('曜日の書き方を読む', () => {
   assert.deepEqual(parseDays('水・金'), [3, 5]);
   assert.deepEqual(parseDays('毎日'), [0, 1, 2, 3, 4, 5, 6]);
   assert.deepEqual(parseDays('月～金'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseDays('1日〜6日のみ'), [0, 1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(parseDates('1日〜6日のみ'), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(parseDates('5日・25日・29日のみ'), [5, 25, 29]);
+  assert.equal(parseDates('水・金'), null);
 });
 
 test('訪問介護計画書の版・訪問枠・具体的内容を読む', () => {

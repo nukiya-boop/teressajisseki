@@ -164,12 +164,14 @@ export function matchPlanSlot(version, { date, start, service }) {
   if (!version) return null;
   const cats = categoriesFor(service);
   const wd = weekdayOf(date);
+  const dom = Number(String(date).slice(8, 10));
   const s = minutes(start);
   const same = version.slots.filter(sl => categoriesFor(sl.service).some(c => c !== 'common' && c !== 'exit' && cats.includes(c)));
   const near = (list, limit) => list
     .map(sl => ({ sl, d: Math.abs(minutes(sl.start) - s) }))
     .filter(x => x.d <= limit).sort((a, b) => a.d - b.d)[0]?.sl ?? null;
-  return near(same.filter(sl => sl.days.includes(wd)), 90) ?? near(same, 30);
+  const onDay = sl => (sl.dates ? sl.dates.includes(dom) : sl.days.includes(wd));
+  return near(same.filter(onDay), 90) ?? near(same, 30);
 }
 
 // ケアプラン第2表の版のうち、その日に有効なもの。

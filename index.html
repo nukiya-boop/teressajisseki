@@ -67,8 +67,21 @@
       </details>
     </section>
 
+    <section class="staff">
+      <h2>③ ヘルパー（自動振り分け）</h2>
+      <p class="hint">1行に「氏名 在籍期間」を書いてください（例：山田太郎 2026年2月1日〜現在、山田花子 2026年2月1日〜6月30日）。シフトや手入力で担当者が決まっていない訪問に、在籍期間内で同じ時間に重ならないよう自動で割り当てます。</p>
+      <textarea id="staffText" rows="6" placeholder="山田太郎 2026年2月1日〜現在"></textarea>
+      <div class="row wrap">
+        <label>移動時間 <input type="number" id="buffer" min="0" max="60" value="10"> 分</label>
+        <label>1日の上限 <input type="number" id="maxHours" min="1" max="24" value="10"> 時間</label>
+        <button id="applyStaff">反映</button>
+        <span id="staffStatus" class="hint"></span>
+      </div>
+      <div id="staffLoad"></div>
+    </section>
+
     <section class="result">
-      <h2>③ 実績・サービス実施記録</h2>
+      <h2>④ 実績・サービス実施記録</h2>
       <div class="toolbar">
         <div id="summary"></div>
         <label>利用者 <select id="userFilter"><option value="">すべて</option></select></label>
