@@ -56,3 +56,16 @@ test('移動時間をあけて入らない訪問は、移動時間を詰めて�
   assert.equal(r.assign.b, 'A');
   assert.equal(r.tight.b, 5);
 });
+
+test('移動時間を守れないときは、訪問の時間を少しずらして入れる', () => {
+  const staff = [{ name: 'A', from: '2026-01-01', to: '' }];
+  const visits = [
+    { key: 'a', date: '2026-07-01', start: '08:00', end: '08:15', userId: 'U1', slot: 'U1' },
+    { key: 'b', date: '2026-07-01', start: '08:16', end: '08:30', userId: 'U2', slot: 'U2' },
+  ];
+  assert.deepEqual(assignStaff(visits, staff, { buffer: 2 }).unassigned, ['b']);
+  const r = assignStaff(visits, staff, { buffer: 2, shift: 4 });
+  assert.deepEqual(r.unassigned, []);
+  assert.equal(r.shifted.b, 1);
+  assert.deepEqual(assignStaff(visits, staff, { buffer: 2, shift: 0 }).unassigned, ['b']);
+});

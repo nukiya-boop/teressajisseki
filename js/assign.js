@@ -33,11 +33,14 @@ export function activeOn(staff, date) {
 // visits: [{ key, date, start, end, userId, slot }]（slot は同じ訪問枠を見分ける文字列）
 // fixed: すでに担当者が決まっている訪問 { key: 氏名 }（シフト・手入力）
 // minBuffer: 移動時間をあけて入れられなかった訪問は、移動時間をここまで詰めて入れる（tight に記録）
-// 戻り値: { assign: { key: 氏名 }, unassigned: [key], tight: { key: 前の訪問との間隔(分) }, load: { 氏名: { visits, minutes } } }
-export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, maxMinutes = 600, fixed = {} } = {}) {
+// shift: それでも入らなければ、訪問の時間を前後この分数までずらして入れる（shifted に記録）
+// 戻り値: { assign: { key: 氏名 }, unassigned: [key], tight: { key: 前の訪問との間隔(分) },
+//          shifted: { key: ずらした分数（+は遅く）}, load: { 氏名: { visits, minutes } } }
+export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, shift = 0, maxMinutes = 600, fixed = {} } = {}) {
   const assign = {};
   const unassigned = [];
   const tight = {};
+  const shifted = {};
   const load = Object.fromEntries(staff.map(p => [p.name, { visits: 0, minutes: 0 }]));
   const regular = {};   // 訪問枠ごとの前回の担当者（同じ人が続けて入るように）
   const familiar = {};  // 利用者ごとの担当回数
@@ -103,10 +106,18 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, ma
       return false;
     };
     const gaps = [...new Set([buffer, ...Array.from({ length: Math.max(buffer - minBuffer, 0) }, (_, i) => buffer - i - 1)])];
+    const offsets = [0, ...Array.from({ length: shift }, (_, i) => [-(i + 1), i + 1]).flat()];
     for (const v of left) {
-      const gap = gaps.find(g => place(v, g));
-      if (gap === undefined) unassigned.push(v.key);
-      else if (gap < buffer) tight[v.key] = gap;
+      const orig = v.range;
+      let gap;
+      const offset = offsets.find(o => {
+        v.range = [orig[0] + o, orig[1] + o];
+        gap = gaps.find(g => place(v, g));
+        return gap !== undefined;
+      });
+      if (offset === undefined) { v.range = orig; unassigned.push(v.key); continue; }
+      if (gap < buffer) tight[v.key] = gap;
+      if (offset) shifted[v.key] = offset;
     }
 
     for (const v of list) {
@@ -118,5 +129,5 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, ma
       (familiar[v.userId] ??= {})[n] = (familiar[v.userId]?.[n] ?? 0) + 1;
     }
   }
-  return { assign, unassigned, tight, load };
+  return { assign, unassigned, tight, shifted, load };
 }

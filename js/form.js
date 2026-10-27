@@ -95,7 +95,7 @@ function groupRows(groups, items) {
 export function recordCard(r, { office = '' } = {}) {
   const [y, m, d] = r.date.split('-').map(Number);
   const wd = WEEKDAYS[new Date(y, m - 1, d).getDay()];
-  const start = r.actualStart || r.planStart, end = r.actualEnd || r.planEnd;
+  const start = r.recStart || r.actualStart || r.planStart, end = r.recEnd || r.actualEnd || r.planEnd;
   const [sh, sm] = String(start).split(':'), [eh, em] = String(end).split(':');
   const has = n => r.items.includes(n);
   const box = (on, text) => `<span class="cb">${on ? '<b class="on">☑</b>' : '□'}${text}</span>`;
