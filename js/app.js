@@ -2,6 +2,7 @@ import { parseRecords, toCSV, decodeFile } from './csv.js';
 import { ALIASES, STATUS, reconcile, confirmPlanned, summarize } from './logic.js';
 import { ITEMS, CARE_LEVELS, WEEKDAYS, detectProfile, resolveItems, generateComment, slotKey } from './record.js';
 import { readDocument, normalizeName } from './pdfimport.js';
+import { recordCard } from './form.js';
 
 const STORE_KEY = 'teressajisseki:v1';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -141,7 +142,9 @@ async function importDocs(files) {
       }
     }
     // 被保険者番号のわかる提供票を先に入れ、ほかの書類は名前で同じ利用者に結びつける
-    docs.sort((a, b) => b.doc.teikyo.length - a.doc.teikyo.length);
+    // 利用票は提供票より後に入れて、同じ月なら利用票を残す
+    const rank = d => d.teikyo.length ? (d.teikyo.some(t => t.kind === '利用票') ? 1 : 0) : 2;
+    docs.sort((a, b) => rank(a.doc) - rank(b.doc));
     for (const { name, doc } of docs) logLine(name, applyDoc(doc));
     status.textContent = `${pdfs.length}件の PDF を読み取りました。`;
   } catch (err) {
@@ -163,18 +166,25 @@ function applyDoc(doc) {
   const office = state.office?.trim();
   if (doc.teikyo.length) {
     const t = doc.teikyo[0];
+    const kind = doc.teikyo.find(x => x.kind)?.kind ?? '提供票';
     const userId = resolveUser(t.name, t.insuredNo);
     const p = state.profiles[userId];
     if (t.careLevel) p.careLevel = t.careLevel;
-    const seen = new Set();
-    const visits = doc.teikyo.flatMap(x => x.visits)
-      .filter(v => VISIT_CARE.test(v.service) && (!office || v.office.includes(office)))
-      .filter(v => { const k = `${v.date}|${v.start}|${v.service}`; return !seen.has(k) && seen.add(k); });
-    state.careplan = state.careplan.filter(e => !(e.userId === userId && e.src === 'teikyo' && e.date.startsWith(t.month)));
-    state.careplan.push(...visits.map(v => ({
-      userId, userName: p.name, date: v.date, start: v.start, end: v.end, service: v.service, code: '', office: v.office, src: 'teikyo',
-    })));
-    notes.push(`サービス提供票 ${t.month}：訪問介護の予定 ${visits.length}件`);
+    const current = state.careplan.filter(e => e.userId === userId && e.src === 'teikyo' && e.date.startsWith(t.month));
+    // 同じ月に利用票と提供票があれば、利用票の予定を使う
+    if (kind === '提供票' && current.some(e => e.kind === '利用票')) {
+      notes.push(`サービス提供票 ${t.month}：同じ月の利用票があるため、利用票の予定を使います`);
+    } else {
+      const seen = new Set();
+      const visits = doc.teikyo.flatMap(x => x.visits)
+        .filter(v => VISIT_CARE.test(v.service) && (!office || v.office.includes(office)))
+        .filter(v => { const k = `${v.date}|${v.start}|${v.service}`; return !seen.has(k) && seen.add(k); });
+      state.careplan = state.careplan.filter(e => !current.includes(e));
+      state.careplan.push(...visits.map(v => ({
+        userId, userName: p.name, date: v.date, start: v.start, end: v.end, service: v.service, code: '', office: v.office, src: 'teikyo', kind,
+      })));
+      notes.push(`サービス${kind} ${t.month}：訪問介護の予定 ${visits.length}件`);
+    }
   }
   if (doc.homeCarePlan) {
     const userId = resolveUser(doc.homeCarePlan.name || doc.name);
@@ -192,17 +202,16 @@ function applyDoc(doc) {
     p.dementiaLevel = a.dementiaLevel;
     p.dementia = a.dementia;
     p.walker = a.walker;
+    p.adl = a.adl;
     notes.push(`アセスメント：${a.careLevel || '介護度不明'}、認知症自立度 ${a.dementiaLevel || '不明'}${a.walker ? '、歩行器使用' : ''}`);
   }
   if (doc.carePlan2.length) {
     const p = state.profiles[resolveUser(doc.name)];
     const made = /作成年月日\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/.exec(doc.text);
     const date = made ? `${2018 + Number(made[1])}-${made[2].padStart(2, '0')}-${made[3].padStart(2, '0')}` : '';
-    if (!p.planRowsDate || date >= p.planRowsDate) {
-      p.planRows = doc.carePlan2;
-      p.planRowsDate = date;
-    }
-    notes.push(`ケアプラン第2表：訪問介護 ${doc.carePlan2.length}行`);
+    p.carePlans = [...(p.carePlans ?? []).filter(c => c.date !== date), { date, rows: doc.carePlan2 }]
+      .sort((a, b) => a.date.localeCompare(b.date));
+    notes.push(`ケアプラン第2表 ${date}：訪問介護 ${doc.carePlan2.length}行（${doc.carePlan2.map(r => r.freq).join('・')}）`);
   }
   return notes.length ? notes.join(' / ') : '読み取り対象外の書類です（そのままでも問題ありません）';
 }
@@ -244,6 +253,7 @@ function profileOf(userId, name = '') {
   p.dementia ??= false;
   p.items ??= [];
   p.planRows ??= [];
+  p.carePlans ??= [];
   p.versions ??= [];
   p.slotOverrides ??= {};
   return p;
@@ -289,14 +299,14 @@ function drawProfile() {
       <label><input type="checkbox" data-f="walker" ${p.walker ? 'checked' : ''}> 歩行器使用</label>
     </div>
     <p class="hint">訪問介護計画書：${p.versions.length ? p.versions.map(v => `${v.date}版`).join('、') : '未取り込み'}
-      ／ ケアプラン第2表：${p.planRows.length ? `${p.planRows.length}行` : '未取り込み'}</p>
+      ／ ケアプラン第2表：${p.carePlans.length ? p.carePlans.map(c => `${c.date}版`).join('、') : '未取り込み'}（ケアプランの頻度を優先）</p>
     <table class="slots">
       <thead><tr><th>${esc(monthInput.value)} の訪問枠</th><th>回数</th><th>レ点（${'自動'}）</th><th>根拠</th><th></th></tr></thead>
       <tbody>${slots.map(s => `
         <tr>
           <td>${esc(s.start)}〜${esc(s.end)} ${esc(s.service)}</td>
           <td>${s.count}回</td>
-          <td class="items">${s.items.map(n => `<span class="chip">レ ${esc(n)}</span>`).join('')}</td>
+          <td class="items">${s.items.map(n => `<span class="chip">レ ${esc(n)}${s.tally[n] < s.count ? ` <small>${s.tally[n]}/${s.count}回</small>` : ''}</span>`).join('')}</td>
           <td class="hint">${esc(s.source)}</td>
           <td><button class="secondary" data-slot="${esc(s.key)}">${editSlot === s.key ? '閉じる' : '編集'}</button></td>
         </tr>
@@ -336,12 +346,17 @@ function slotsOf(userId) {
   const map = new Map();
   for (const r of rows.filter(r => r.userId === userId)) {
     const key = slotKey(r.planStart || r.actualStart, r.service);
-    const s = map.get(key) ?? { key, start: r.planStart || r.actualStart, end: r.planEnd || r.actualEnd, service: r.service, count: 0, items: [], source: '' };
-    if (!s.count) { s.items = r.autoItems; s.source = r.source; }
+    const s = map.get(key) ?? { key, start: r.planStart || r.actualStart, end: r.planEnd || r.actualEnd, service: r.service, count: 0, tally: {}, sources: new Set() };
     s.count++;
+    for (const n of r.autoItems) s.tally[n] = (s.tally[n] ?? 0) + 1;
+    s.sources.add(r.source);
     map.set(key, s);
   }
-  return [...map.values()].sort((a, b) => a.start.localeCompare(b.start));
+  return [...map.values()].map(s => ({
+    ...s,
+    items: ITEMS.map(it => it.name).filter(n => s.tally[n]),
+    source: [...s.sources].join(' / '),
+  })).sort((a, b) => a.start.localeCompare(b.start));
 }
 
 function updateProfile(userId, patch) {
@@ -398,7 +413,7 @@ function download(name, text, type) {
 $('#printRecords').addEventListener('click', () => {
   const list = visibleRows();
   if (!list.length) { alert('印刷する記録がありません。'); return; }
-  $('#printArea').innerHTML = list.map(recordCard).join('');
+  $('#printArea').innerHTML = list.map(r => recordCard(r, { office: state.office })).join('');
   document.body.classList.add('printing');
   window.print();
 });
@@ -409,15 +424,18 @@ function rowKey(r) {
 }
 
 // 予定・実績の各行に、レ点と記録コメントを自動で入れる（手で直した内容はそちらを優先）。
-function withRecord(r, slotCounts, weeks) {
+function withRecord(r, slotCounts, slotDays, weeks) {
   const key = rowKey(r);
   const start = r.planStart || r.actualStart;
   const saved = state.records[key] ?? {};
   const profile = profileOf(r.userId, r.userName);
   const sk = slotKey(start, r.service);
-  const auto = resolveItems({ profile, date: r.date, start, service: r.service, slotPerWeek: slotCounts[`${r.userId}|${sk}`] / weeks });
+  const auto = resolveItems({
+    profile, date: r.date, start, service: r.service,
+    slotPerWeek: slotCounts[`${r.userId}|${sk}`] / weeks, slotWeekdays: [...slotDays[`${r.userId}|${sk}`]],
+  });
   const items = saved.items ?? auto.items;
-  const comment = saved.comment ?? generateComment({ profile, items, seed: key + (saved.regen ?? ''), start });
+  const comment = saved.comment ?? generateComment({ profile, items, seed: key + (saved.regen ?? ''), start, date: r.date });
   return { ...r, userName: r.userName || profile.name, key, items, autoItems: auto.items, source: saved.items ? '手で修正' : auto.source, comment, confirmed: !!saved.confirmed };
 }
 
@@ -441,12 +459,13 @@ function render() {
   });
   const [y, m] = monthInput.value.split('-').map(Number);
   const weeks = new Date(y, m, 0).getDate() / 7;
-  const slotCounts = {};
+  const slotCounts = {}, slotDays = {};
   for (const r of base) {
     const k = `${r.userId}|${slotKey(r.planStart || r.actualStart, r.service)}`;
     slotCounts[k] = (slotCounts[k] ?? 0) + 1;
+    (slotDays[k] ??= new Set()).add(new Date(`${r.date}T00:00:00`).getDay());
   }
-  rows = base.map(r => withRecord(r, slotCounts, weeks));
+  rows = base.map(r => withRecord(r, slotCounts, slotDays, weeks));
 
   const counts = summarize(rows);
   $('#summary').innerHTML = Object.entries(counts)
@@ -535,30 +554,6 @@ $('#rows').addEventListener('change', e => {
     updateRecord(openKey, { confirmed: e.target.checked });
   }
 });
-
-// ---- サービス実施記録（印刷用） ----
-
-function recordCard(r) {
-  const [y, m, d] = r.date.split('-').map(Number);
-  const wd = WEEKDAYS[new Date(y, m - 1, d).getDay()];
-  const start = r.actualStart || r.planStart, end = r.actualEnd || r.planEnd;
-  const box = n => `<span class="cb">${r.items.includes(n) ? '☑' : '☐'}${esc(n)}</span>`;
-  const group = g => `<div class="g"><span class="gname">${g}</span>${ITEMS.filter(it => it.group === g).map(it => box(it.name)).join('')}</div>`;
-  const groupsOf = cats => [...new Set(ITEMS.filter(it => cats.includes(it.cat)).map(it => it.group))].map(group).join('');
-  const body = /身体|通院|乗降/.test(r.service), life = /生活/.test(r.service);
-  return `<article class="rec">
-    <header><b>サービス実施記録</b><span>事業所名 ${esc(r.office || state.office || '')}</span></header>
-    <div class="rec-line"><span>お名前 <u>${esc(r.userName)}</u> 様</span><span>ヘルパー氏名 <u class="blank">${esc(r.staff)}</u></span></div>
-    <div class="rec-line"><span>サービス実施日時 令和${y - 2018}年${m}月${d}日（${wd}） ${esc(start)} 〜 ${esc(end)}</span></div>
-    <div class="rec-line"><span>サービスの種類 ${body ? '☑' : '☐'}身体介護 ${life ? '☑' : '☐'}生活援助（${esc(r.service)}）</span></div>
-    <div class="rec-body">
-      <div>${groupsOf(['common', 'body'])}</div>
-      <div>${groupsOf(['life'])}${groupsOf(['exit'])}
-        <div class="rec-comment"><span class="gname">記録</span>${esc(r.comment)}</div>
-      </div>
-    </div>
-  </article>`;
-}
 
 function cls(status) {
   return { [STATUS.OK]: 'ok', [STATUS.TIME_DIFF]: 'warn', [STATUS.NO_SHIFT]: 'warn',

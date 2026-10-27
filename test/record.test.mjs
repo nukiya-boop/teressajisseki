@@ -79,3 +79,41 @@ test('コメントは介護度・認知症に合わせて作られ、同じ訪�
   const light = generateComment({ profile: { careLevel: '要支援1', dementia: false }, items: ['掃除'], seed: 'x' });
   assert.doesNotMatch(light, /作話|ベッド上で臥床/);
 });
+
+test('ケアプラン第2表の頻度を優先し、週2回の入浴は計画書で決まった曜日だけにつける', () => {
+  const profile = {
+    versions: [
+      { date: '2026-04-01', slots: [{ no: 1, start: '14:00', end: '14:55', days: [3, 5], service: '身体介護', items: ['全身浴', '洗髪', '更衣介助', '水分補給'] }] },
+      { date: '2026-05-01', slots: [
+        { no: 2, start: '14:00', end: '14:55', days: [0, 1, 2, 3, 4, 5, 6], service: '身体介護', items: ['全身浴', '洗髪', '更衣介助', '水分補給'] },
+        { no: 3, start: '20:00', end: '20:15', days: [0, 1, 2, 3, 4, 5, 6], service: '身体介護', items: ['就寝介助', '口腔ケア', '服薬介助・確認'] },
+      ] },
+    ],
+    carePlans: [{ date: '2026-05-01', rows: [
+      { items: ['全身浴', '洗髪', '更衣介助', '水分補給'], perWeek: 2 },
+      { items: ['起床介助', '就寝介助', '整容'], perWeek: 7 },
+    ] }],
+  };
+  const all = [0, 1, 2, 3, 4, 5, 6];
+  const wed = resolveItems({ profile, date: '2026-06-03', start: '14:00', service: '身体介護２', slotPerWeek: 6, slotWeekdays: all });
+  assert.ok(wed.items.includes('全身浴'));
+  assert.match(wed.source, /ケアプラン第2表 2026-05-01/);
+  const mon = resolveItems({ profile, date: '2026-06-01', start: '14:00', service: '身体介護２', slotPerWeek: 6, slotWeekdays: all });
+  assert.ok(!mon.items.includes('全身浴') && !mon.items.includes('洗髪'));
+  const night = resolveItems({ profile, date: '2026-06-01', start: '20:00', service: '身体介護０１・夜', slotPerWeek: 7, slotWeekdays: all });
+  assert.ok(night.items.includes('就寝介助') && night.items.includes('整容') && night.items.includes('口腔ケア'));
+  assert.ok(!night.items.includes('起床介助') && !night.items.includes('全身浴') && night.items.includes('更衣介助') === false);
+});
+
+test('コメントは季節・ADL・時間帯で変わり、長くなりすぎない', () => {
+  const profile = { careLevel: '要介護2', adl: { '洗身': '一部介助' } };
+  const texts = new Set();
+  for (let d = 1; d <= 28; d++) {
+    const c = generateComment({ profile, items: ['顔色・発汗・体温等', '全身浴', '洗髪', '火元'], seed: `2026-01-${d}`, start: '14:00', date: `2026-01-${String(d).padStart(2, '0')}` });
+    assert.ok(c.length <= 200, c);
+    texts.add(c);
+  }
+  assert.ok(texts.size >= 25, `同じ文が多すぎる: ${texts.size}`);
+  const night = generateComment({ profile, items: ['就寝介助'], seed: 'n', start: '20:00', date: '2026-07-01' });
+  assert.doesNotMatch(night, /おはよう|昼食/);
+});

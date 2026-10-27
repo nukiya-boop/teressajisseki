@@ -83,7 +83,7 @@ export function parseTeikyo(items) {
   }
 
   const wdLabel = items.find(it => it.str.trim() === '曜日');
-  if (!wdLabel) return { month, name, insuredNo, careLevel, visits: [] };
+  if (!wdLabel) return { month, kind: '', name, insuredNo, careLevel, visits: [] };
   const days = items.filter(it => Math.abs(it.y - wdLabel.y) <= 3 && it.x > wdLabel.x + 15 &&
     it.str.trim().length === 1 && WD.includes(it.str.trim()))
     .map(it => it.x + it.w / 2).sort((a, b) => a - b);
@@ -107,7 +107,8 @@ export function parseTeikyo(items) {
       }
     }
   }
-  return { month, name, insuredNo, careLevel, visits };
+  const kind = items.some(it => it.str.replace(/\s/g, '').includes('サービス利用票')) ? '利用票' : '提供票';
+  return { month, kind, name, insuredNo, careLevel, visits };
 }
 
 // ---- 訪問介護計画書（事業所作成） ----
@@ -191,8 +192,22 @@ export function parseAssessment(pages) {
     dementiaLevel,
     dementia: /^(Ⅱ|Ⅲ|Ⅳ|M)/.test(dementiaLevel),
     walker: /室内：使用機器[^\n]*☑歩行器/.test(all),
+    adl: parseAdl(lines),
     wheelchair: /☑車いす/.test(all),
   };
+}
+
+const ADL_KEYS = ['寝返り', '起き上がり', '歩行', '洗身', '移乗', '食事摂取', '口腔衛生', '上衣の着脱', 'ズボンの着脱', '薬の内服', '金銭の管理', '買物', '簡単な調理', '排尿', '排便'];
+
+// 「洗身 □自立 ☑一部介助 □全介助」のような行から選ばれたものを読む
+function parseAdl(lines) {
+  const adl = {};
+  for (const key of ADL_KEYS) {
+    const line = lines.find(l => l.includes(key) && l.includes('☑') && /[□☑]/.test(l.slice(l.indexOf(key) + key.length, l.indexOf(key) + key.length + 3)));
+    const m = line && new RegExp(`${key}[^☑]*?☑([^□☑\n]+)`).exec(line);
+    if (m) adl[key] = m[1].trim();
+  }
+  return adl;
 }
 
 // ---- ケアプラン第2表（訪問介護の行のサービス内容と頻度） ----
