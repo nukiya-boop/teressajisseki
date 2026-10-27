@@ -24,6 +24,7 @@ $('#buffer').value = state.buffer ?? 1;
 $('#tolerance').value = state.tolerance ?? 4;
 $('#maxHours').value = state.maxHours ?? 10;
 $('#minBuffer').value = state.minBuffer ?? state.buffer ?? 1;
+$('#shiftMax').value = state.shiftMax ?? 0;
 
 // 利用者が多いと localStorage（約5MB）に収まらないため、IndexedDB に保存する
 function openDb() {
@@ -538,7 +539,7 @@ function assignHelpers(list) {
   }
   const result = assignBest(visits, staff, {
     buffer: Number(state.buffer ?? 1), minBuffer: Number(state.minBuffer ?? state.buffer ?? 1),
-    shift: Number(state.tolerance ?? 4), maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
+    shift: Number(state.shiftMax ?? 0), maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
   });
   for (const r of list) {
     if (!r.staff && result.assign[r.key]) { r.staff = result.assign[r.key]; r.staffAuto = true; }
@@ -563,7 +564,7 @@ function drawStaff() {
   if (!staffLoad) { box.innerHTML = ''; $('#staffStatus').textContent = ''; return; }
   const { load, unassigned, staff } = staffLoad;
   const tight = Object.keys(staffLoad.tight).length, shifted = Object.keys(staffLoad.shifted).length;
-  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て（うち移動時間を詰めたもの${tight}件、${state.tolerance ?? 4}分以内で前倒ししたもの${shifted}件）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
+  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て（うち移動時間を詰めたもの${tight}件${shifted ? `、前倒ししたもの${shifted}件` : ''}）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
   const [y, m] = monthInput.value.split('-').map(Number);
   const first = `${monthInput.value}-01`, last = `${monthInput.value}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   const shown = staff.filter(p => p.from <= last && (!p.to || p.to >= first));
@@ -578,6 +579,7 @@ $('#applyStaff').addEventListener('click', () => {
   state.buffer = $('#buffer').value;
   state.maxHours = $('#maxHours').value;
   state.minBuffer = $('#minBuffer').value;
+  state.shiftMax = $('#shiftMax').value;
   save();
   render();
 });

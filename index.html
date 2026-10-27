@@ -74,6 +74,7 @@
       <div class="row wrap">
         <label>移動時間 <input type="number" id="buffer" min="0" max="60" value="1"> 分</label>
         <label>足りないときは <input type="number" id="minBuffer" min="0" max="60" value="1"> 分まで詰める</label>
+        <label title="0なら前倒ししません。開始は予定より遅らせません">前倒し 最大 <input type="number" id="shiftMax" min="0" max="10" value="0"> 分</label>
         <label>1日の上限 <input type="number" id="maxHours" min="1" max="24" value="10"> 時間</label>
         <button id="applyStaff">反映</button>
         <span id="staffStatus" class="hint"></span>
@@ -87,7 +88,7 @@
         <div id="summary"></div>
         <label>利用者 <select id="userFilter"><option value="">すべて</option></select></label>
         <label>状態 <select id="statusFilter"><option value="">すべて</option></select></label>
-        <label title="実績と予定のずれの許容範囲。ヘルパーが足りないときは、この範囲で訪問を前倒しして割り当てます（開始は遅らせません）">許容誤差 <input type="number" id="tolerance" min="0" max="60" value="4"> 分</label>
+        <label title="実績と予定のずれの許容範囲">許容誤差 <input type="number" id="tolerance" min="0" max="60" value="4"> 分</label>
         <button id="confirm" class="secondary">未実績を予定どおり確定</button>
         <button id="export" class="secondary">CSV出力</button>
         <button id="printRecords">サービス実施記録を印刷</button>
