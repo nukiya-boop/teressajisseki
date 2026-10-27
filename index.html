@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>介護実績管理</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>介護実績管理</h1>
+    <label>対象月 <input type="month" id="month"></label>
+  </header>
+
+  <main>
+    <section class="inputs">
+      <article class="drop" data-kind="careplan">
+        <h2>① ケアプラン</h2>
+        <p class="hint">利用者ID, 利用者名, 曜日, 開始, 終了, サービス内容, サービスコード</p>
+        <input type="file" accept=".csv,.tsv,.txt">
+        <textarea placeholder="CSVファイルをドロップ、またはExcelから貼り付け"></textarea>
+        <div class="row"><button class="load">反映</button><span class="count"></span><button class="clear secondary">クリア</button></div>
+      </article>
+      <article class="drop" data-kind="shift">
+        <h2>② シフト</h2>
+        <p class="hint">日付, 担当者, 開始, 終了</p>
+        <input type="file" accept=".csv,.tsv,.txt">
+        <textarea placeholder="CSVファイルをドロップ、またはExcelから貼り付け"></textarea>
+        <div class="row"><button class="load">反映</button><span class="count"></span><button class="clear secondary">クリア</button></div>
+      </article>
+      <article class="drop" data-kind="actual">
+        <h2>③ 実績</h2>
+        <p class="hint">日付, 利用者ID, 開始, 終了, サービス内容, 担当者</p>
+        <input type="file" accept=".csv,.tsv,.txt">
+        <textarea placeholder="CSVファイルをドロップ、またはExcelから貼り付け"></textarea>
+        <div class="row"><button class="load">反映</button><span class="count"></span><button class="clear secondary">クリア</button></div>
+      </article>
+    </section>
+
+    <section class="result">
+      <div class="toolbar">
+        <div id="summary"></div>
+        <label>利用者 <select id="userFilter"><option value="">すべて</option></select></label>
+        <label>状態 <select id="statusFilter"><option value="">すべて</option></select></label>
+        <label>許容誤差 <input type="number" id="tolerance" min="0" max="60" value="10"> 分</label>
+        <button id="confirm">未実績を予定どおり確定</button>
+        <button id="export" class="secondary">CSV出力</button>
+        <button id="print" class="secondary">印刷</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>テレッサ</th><th>日付</th><th>利用者</th><th>サービス</th><th>コード</th>
+            <th>予定</th><th>実績</th><th>担当者</th><th>状態</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p id="empty" class="hint">ケアプランを反映すると、ここに実績表が表示されます。</p>
+    </section>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

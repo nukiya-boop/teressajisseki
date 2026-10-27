@@ -1,0 +1,1 @@
+{"name":"teressajisseki","private":true,"type":"module","scripts":{"test":"node --test test/*.mjs","start":"npx --yes serve -l 8080 ."}}
