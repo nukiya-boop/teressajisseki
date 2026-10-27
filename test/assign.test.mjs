@@ -57,15 +57,45 @@ test('移動時間をあけて入らない訪問は、移動時間を詰めて�
   assert.equal(r.tight.b, 5);
 });
 
-test('移動時間を守れないときは、訪問の時間を少しずらして入れる', () => {
+test('移動時間を守れないときは、開始を遅らせず前倒しだけで入れる', () => {
+  const staff = [{ name: 'A', from: '2026-01-01', to: '' }];
+  const visits = [
+    { key: 'q', date: '2026-07-01', start: '08:00', end: '08:20', userId: 'U1', slot: 'U1' },
+    { key: 'r', date: '2026-07-01', start: '08:21', end: '08:40', userId: 'U2', slot: 'U2' },
+    { key: 's', date: '2026-07-01', start: '09:00', end: '09:20', userId: 'U3', slot: 'U3' },
+    { key: 't', date: '2026-07-01', start: '09:21', end: '09:40', userId: 'U4', slot: 'U4' },
+  ];
+  const fixed = { r: 'A', s: 'A' };
+  assert.deepEqual(assignStaff(visits, staff, { buffer: 2, fixed }).unassigned, ['q', 't']);
+  const r = assignStaff(visits, staff, { buffer: 2, shift: 4, fixed });
+  // q は1分前倒しすれば r の前に入る
+  assert.equal(r.assign.q, 'A');
+  assert.equal(r.shifted.q, 1);
+  // t は s の直後なので、遅らせないと入らない（遅らせはしない）
+  assert.deepEqual(r.unassigned, ['t']);
+});
+
+test('いくつかの組み方を試して、空欄の少ないものを使う', async () => {
+  const { assignBest } = await import('../js/assign.js');
+  const staff = [{ name: 'A', from: '2026-01-01', to: '' }, { name: 'B', from: '2026-01-01', to: '' }];
+  const visits = Array.from({ length: 12 }, (_, i) => ({
+    key: `v${i}`, date: '2026-07-01', start: `08:${String(i * 5).padStart(2, '0')}`, end: `08:${String(i * 5 + 9).padStart(2, '0')}`, userId: `U${i}`, slot: `U${i}`,
+  }));
+  const one = assignStaff(visits, staff, { buffer: 1 });
+  const best = assignBest(visits, staff, { buffer: 1 });
+  assert.ok(best.unassigned.length <= one.unassigned.length);
+  assert.ok(Object.values(best.tight).every(g => g < 1));
+});
+
+test('続けて入る訪問は、前の訪問を少し前倒しして、次の訪問を予定どおりに始める', () => {
   const staff = [{ name: 'A', from: '2026-01-01', to: '' }];
   const visits = [
     { key: 'a', date: '2026-07-01', start: '08:00', end: '08:15', userId: 'U1', slot: 'U1' },
-    { key: 'b', date: '2026-07-01', start: '08:16', end: '08:30', userId: 'U2', slot: 'U2' },
+    { key: 'b', date: '2026-07-01', start: '08:15', end: '08:30', userId: 'U2', slot: 'U2' },
   ];
-  assert.deepEqual(assignStaff(visits, staff, { buffer: 2 }).unassigned, ['b']);
-  const r = assignStaff(visits, staff, { buffer: 2, shift: 4 });
+  assert.deepEqual(assignStaff(visits, staff, { buffer: 1 }).unassigned, ['b']);
+  const r = assignStaff(visits, staff, { buffer: 1, shift: 4 });
   assert.deepEqual(r.unassigned, []);
-  assert.equal(r.shifted.b, 1);
-  assert.deepEqual(assignStaff(visits, staff, { buffer: 2, shift: 0 }).unassigned, ['b']);
+  assert.equal(r.shifted.a, 1);
+  assert.equal(r.shifted.b, undefined);
 });

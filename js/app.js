@@ -3,7 +3,7 @@ import { ALIASES, STATUS, reconcile, confirmPlanned, summarize } from './logic.j
 import { ITEMS, CARE_LEVELS, WEEKDAYS, detectProfile, resolveItems, generateComment, slotKey } from './record.js';
 import { readDocument, normalizeName } from './pdfimport.js';
 import { recordCard } from './form.js';
-import { parseStaff, assignStaff } from './assign.js';
+import { parseStaff, assignBest } from './assign.js';
 
 const STORE_KEY = 'teressajisseki:v1';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -20,10 +20,10 @@ const monthInput = $('#month');
 monthInput.value = state.month || new Date().toISOString().slice(0, 7);
 $('#office').value = state.office ?? '';
 $('#staffText').value = state.staffText ?? '';
-$('#buffer').value = state.buffer ?? 2;
+$('#buffer').value = state.buffer ?? 1;
 $('#tolerance').value = state.tolerance ?? 4;
 $('#maxHours').value = state.maxHours ?? 10;
-$('#minBuffer').value = state.minBuffer ?? state.buffer ?? 2;
+$('#minBuffer').value = state.minBuffer ?? state.buffer ?? 1;
 
 // 利用者が多いと localStorage（約5MB）に収まらないため、IndexedDB に保存する
 function openDb() {
@@ -536,8 +536,8 @@ function assignHelpers(list) {
     if (r.staff) fixed[r.key] = r.staff;
     visits.push({ key: r.key, date: r.date, start: r.actualStart || r.planStart, end: r.actualEnd || r.planEnd, userId: r.userId, slot: `${r.userId}|${slotKey(r.planStart || r.actualStart, r.service)}` });
   }
-  const result = assignStaff(visits, staff, {
-    buffer: Number(state.buffer ?? 2), minBuffer: Number(state.minBuffer ?? state.buffer ?? 2),
+  const result = assignBest(visits, staff, {
+    buffer: Number(state.buffer ?? 1), minBuffer: Number(state.minBuffer ?? state.buffer ?? 1),
     shift: Number(state.tolerance ?? 4), maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
   });
   for (const r of list) {
@@ -546,10 +546,11 @@ function assignHelpers(list) {
     if (result.tight[r.key] !== undefined) notes.push(`前後の訪問との移動時間 ${result.tight[r.key]}分`);
     const o = result.shifted[r.key];
     if (o) {
-      const move = t => { const m = toMin(t) + o; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
-      r.recStart = move(r.actualStart || r.planStart);
-      r.recEnd = move(r.actualEnd || r.planEnd);
-      notes.push(`予定から${Math.abs(o)}分${o > 0 ? '遅く' : '早く'}して割り当て`);
+      // 提供時間の長さはそのままで前倒し（開始は遅らせない）
+      const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      r.recStart = fmt(toMin(r.actualStart || r.planStart) - o);
+      r.recEnd = fmt(toMin(r.actualEnd || r.planEnd) - o);
+      notes.push(`予定より${o}分前倒しして割り当て`);
     }
     if (!r.staff) notes.push('空いているヘルパーなし');
     r.staffNote = notes.join('、');
@@ -562,7 +563,7 @@ function drawStaff() {
   if (!staffLoad) { box.innerHTML = ''; $('#staffStatus').textContent = ''; return; }
   const { load, unassigned, staff } = staffLoad;
   const tight = Object.keys(staffLoad.tight).length, shifted = Object.keys(staffLoad.shifted).length;
-  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て（うち移動時間を詰めたもの${tight}件、時間を${state.tolerance ?? 4}分以内でずらしたもの${shifted}件）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
+  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て（うち移動時間を詰めたもの${tight}件、${state.tolerance ?? 4}分以内で前倒ししたもの${shifted}件）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
   const [y, m] = monthInput.value.split('-').map(Number);
   const first = `${monthInput.value}-01`, last = `${monthInput.value}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   const shown = staff.filter(p => p.from <= last && (!p.to || p.to >= first));

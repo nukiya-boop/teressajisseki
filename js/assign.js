@@ -33,9 +33,10 @@ export function activeOn(staff, date) {
 // visits: [{ key, date, start, end, userId, slot }]（slot は同じ訪問枠を見分ける文字列）
 // fixed: すでに担当者が決まっている訪問 { key: 氏名 }（シフト・手入力）
 // minBuffer: 移動時間をあけて入れられなかった訪問は、移動時間をここまで詰めて入れる（tight に記録）
-// shift: それでも入らなければ、訪問の時間を前後この分数までずらして入れる（shifted に記録）
+// shift: それでも入らなければ、訪問をこの分数まで前倒しして入れる（shifted に記録）。
+//        開始は予定より遅らせない。提供時間の長さは変えない
 // 戻り値: { assign: { key: 氏名 }, unassigned: [key], tight: { key: 前の訪問との間隔(分) },
-//          shifted: { key: ずらした分数（+は遅く）}, load: { 氏名: { visits, minutes } } }
+//          shifted: { key: 開始を早めた分数 }, load: { 氏名: { visits, minutes } } }
 export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, shift = 0, maxMinutes = 600, fixed = {} } = {}) {
   const assign = {};
   const unassigned = [];
@@ -91,6 +92,26 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
       const direct = people.filter(n => fits(n, v, gap))
         .sort((a, b) => today[a] - today[b] || a.localeCompare(b))[0];
       if (direct) { put(v, direct); return true; }
+      // 直前の訪問1件を数分前倒しすれば、この訪問を予定どおりの開始で入れられる
+      for (const n of people) {
+        const blocking = clash(n, v, gap);
+        if (blocking.length !== 1) continue;
+        const c = blocking[0].v;
+        if (fixed[c.key] || c.range[0] >= v.range[0]) continue;
+        const need = c.range[1] + gap - v.range[0];
+        if (need < 1 || need + (shifted[c.key] ?? 0) > shift || today[n] + len(v) > maxMinutes) continue;
+        const orig = c.range;
+        remove(c, n);
+        c.range = [orig[0] - need, orig[1] - need];
+        if (!clash(n, c, gap).length && !clash(n, v, gap).length) {
+          put(c, n);
+          put(v, n);
+          shifted[c.key] = (shifted[c.key] ?? 0) + need;
+          return true;
+        }
+        c.range = orig;
+        put(c, n);
+      }
       for (const n of people) {
         const blocking = clash(n, v, gap);
         if (blocking.length !== 1 || fixed[blocking[0].v.key]) continue;
@@ -106,12 +127,12 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
       return false;
     };
     const gaps = [...new Set([buffer, ...Array.from({ length: Math.max(buffer - minBuffer, 0) }, (_, i) => buffer - i - 1)])];
-    const offsets = [0, ...Array.from({ length: shift }, (_, i) => [-(i + 1), i + 1]).flat()];
+    const earlier = Array.from({ length: shift + 1 }, (_, i) => i);
     for (const v of left) {
       const orig = v.range;
       let gap;
-      const offset = offsets.find(o => {
-        v.range = [orig[0] + o, orig[1] + o];
+      const offset = earlier.find(o => {
+        v.range = [orig[0] - o, orig[1] - o];
         gap = gaps.find(g => place(v, g));
         return gap !== undefined;
       });
@@ -130,4 +151,19 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
     }
   }
   return { assign, unassigned, tight, shifted, load };
+}
+
+// 最初に広めの移動時間で組んでから詰めるほうが、朝の訪問に人が偏らず空欄が減ることがある。
+// いくつかの組み方を試し、空欄がいちばん少ないものを使う（移動時間の下限は buffer のまま）。
+export function assignBest(visits, staff, opts = {}) {
+  const buffer = opts.buffer ?? 10;
+  const floor = Math.min(buffer, opts.minBuffer ?? buffer);
+  let best = null;
+  for (const start of [...new Set([buffer, 5, 10, 15].filter(b => b >= buffer))]) {
+    const r = assignStaff(visits, staff, { ...opts, buffer: start, minBuffer: floor });
+    // 実際に求めた移動時間（buffer）を満たしているものは「詰めた」扱いにしない
+    r.tight = Object.fromEntries(Object.entries(r.tight).filter(([, g]) => g < buffer));
+    if (!best || r.unassigned.length < best.unassigned.length) best = r;
+  }
+  return best;
 }
