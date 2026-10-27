@@ -22,6 +22,7 @@ $('#office').value = state.office ?? '';
 $('#staffText').value = state.staffText ?? '';
 $('#buffer').value = state.buffer ?? 10;
 $('#maxHours').value = state.maxHours ?? 10;
+$('#minBuffer').value = state.minBuffer ?? 0;
 
 // 利用者が多いと localStorage（約5MB）に収まらないため、IndexedDB に保存する
 function openDb() {
@@ -428,10 +429,10 @@ $('#confirm').addEventListener('click', () => {
 
 $('#export').addEventListener('click', () => {
   const header = ['テレッサ', '日付', '利用者ID', '利用者名', 'サービス内容', 'サービスコード',
-    '予定開始', '予定終了', '実績開始', '実績終了', '担当者', '状態', ...ITEMS.map(it => it.name), '記録コメント', '記録確認', 'レ点の根拠'];
+    '予定開始', '予定終了', '実績開始', '実績終了', '担当者', '状態', ...ITEMS.map(it => it.name), '記録コメント', '記録確認', 'レ点の根拠', '振り分けメモ'];
   const body = visibleRows().map(r => [r.teressa ? '○' : '', r.date, r.userId, r.userName, r.service,
     r.code, r.planStart, r.planEnd, r.actualStart, r.actualEnd, r.staff, r.status,
-    ...ITEMS.map(it => r.items.includes(it.name) ? 'レ' : ''), r.comment, r.confirmed ? '済' : '', r.source]);
+    ...ITEMS.map(it => r.items.includes(it.name) ? 'レ' : ''), r.comment, r.confirmed ? '済' : '', r.source, r.staffNote ?? '']);
   download(`実績_${monthInput.value}.csv`, '﻿' + toCSV([header, ...body]), 'text/csv');
 });
 
@@ -529,10 +530,12 @@ function assignHelpers(list) {
     visits.push({ key: r.key, date: r.date, start: r.actualStart || r.planStart, end: r.actualEnd || r.planEnd, userId: r.userId, slot: `${r.userId}|${slotKey(r.planStart || r.actualStart, r.service)}` });
   }
   const result = assignStaff(visits, staff, {
-    buffer: Number(state.buffer ?? 10), maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
+    buffer: Number(state.buffer ?? 10), minBuffer: Number(state.minBuffer ?? 0), maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
   });
   for (const r of list) {
     if (!r.staff && result.assign[r.key]) { r.staff = result.assign[r.key]; r.staffAuto = true; }
+    if (result.tight[r.key] !== undefined) r.staffNote = `前後の訪問との移動時間 ${result.tight[r.key]}分`;
+    else if (!r.staff) r.staffNote = '空いているヘルパーなし';
   }
   staffLoad = { ...result, staff };
 }
@@ -541,7 +544,8 @@ function drawStaff() {
   const box = $('#staffLoad');
   if (!staffLoad) { box.innerHTML = ''; $('#staffStatus').textContent = ''; return; }
   const { load, unassigned, staff } = staffLoad;
-  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て、${unassigned.length}件は空いているヘルパーがいないため空欄`;
+  const tight = Object.keys(staffLoad.tight).length;
+  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て（うち${tight}件は移動時間を詰めて割り当て）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
   const [y, m] = monthInput.value.split('-').map(Number);
   const first = `${monthInput.value}-01`, last = `${monthInput.value}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   const shown = staff.filter(p => p.from <= last && (!p.to || p.to >= first));
@@ -555,6 +559,7 @@ $('#applyStaff').addEventListener('click', () => {
   state.staffText = $('#staffText').value;
   state.buffer = $('#buffer').value;
   state.maxHours = $('#maxHours').value;
+  state.minBuffer = $('#minBuffer').value;
   save();
   render();
 });

@@ -43,3 +43,16 @@ test('同じ訪問枠には同じヘルパーが続けて入り、決まって�
   const { assign } = assignStaff(visits, staff, { fixed: { k1: 'TEST HELPER ONE' } });
   assert.deepEqual([assign.k1, assign.k2, assign.k3], ['TEST HELPER ONE', 'TEST HELPER ONE', 'TEST HELPER ONE']);
 });
+
+test('移動時間をあけて入らない訪問は、移動時間を詰めて入れる', () => {
+  const staff = [{ name: 'A', from: '2026-01-01', to: '' }];
+  const visits = [
+    { key: 'a', date: '2026-07-01', start: '08:00', end: '08:15', userId: 'U1', slot: 'U1' },
+    { key: 'b', date: '2026-07-01', start: '08:20', end: '08:35', userId: 'U2', slot: 'U2' },
+  ];
+  assert.deepEqual(assignStaff(visits, staff, { buffer: 10 }).unassigned, ['b']);
+  const r = assignStaff(visits, staff, { buffer: 10, minBuffer: 0 });
+  assert.deepEqual(r.unassigned, []);
+  assert.equal(r.assign.b, 'A');
+  assert.equal(r.tight.b, 5);
+});
