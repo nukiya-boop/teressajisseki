@@ -26,6 +26,7 @@ $('#maxHours').value = state.maxHours ?? 10;
 $('#minBuffer').value = state.minBuffer ?? state.buffer ?? 1;
 $('#shiftMax').value = state.shiftMax ?? 0;
 $('#trimEnd').value = state.trimEnd ?? 1;
+$('#maxSpan').value = state.maxSpan ?? '';
 
 // 利用者が多いと localStorage（約5MB）に収まらないため、IndexedDB に保存する
 function openDb() {
@@ -458,7 +459,7 @@ $('#printRecords').addEventListener('click', () => {
 window.addEventListener('afterprint', () => document.body.classList.remove('printing'));
 
 function rowKey(r) {
-  return `${r.date}|${r.userId}|${r.planStart || r.actualStart}`;
+  return `${r.date}|${r.userId}|${r.planStart || r.actualStart}|${r.service}`;
 }
 
 // 予定・実績の各行に、レ点と記録コメントを自動で入れる（手で直した内容はそちらを優先）。
@@ -540,7 +541,8 @@ function assignHelpers(list) {
   }
   const result = assignBest(visits, staff, {
     buffer: Number(state.buffer ?? 1), minBuffer: Number(state.minBuffer ?? state.buffer ?? 1),
-    shift: Number(state.shiftMax ?? 0), trimEnd: Number(state.trimEnd ?? 1), maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
+    shift: Number(state.shiftMax ?? 0), trimEnd: Number(state.trimEnd ?? 1),
+    maxSpan: Number(state.maxSpan ?? 0) * 60 || Infinity, maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
   });
   for (const r of list) {
     if (!r.staff && result.assign[r.key]) { r.staff = result.assign[r.key]; r.staffAuto = true; }
@@ -589,6 +591,7 @@ $('#applyStaff').addEventListener('click', () => {
   state.minBuffer = $('#minBuffer').value;
   state.shiftMax = $('#shiftMax').value;
   state.trimEnd = $('#trimEnd').value;
+  state.maxSpan = $('#maxSpan').value;
   save();
   render();
 });

@@ -42,7 +42,8 @@ export function activeOn(staff, date) {
 //          shifted: { key: 開始を早めた分数 }, load: { 氏名: { visits, minutes } } }
 // trimEnd: 直前の訪問の終了をこの分数まで早めて、次の訪問を予定どおりに始める（trimmed に記録）。
 //          時間区分（20・30・45・60・90分）をまたいで短くなる場合は早めない
-export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, shift = 0, trimEnd = 0, maxMinutes = 600, fixed = {} } = {}) {
+// maxSpan: 1日の拘束時間（最初の訪問の開始〜最後の訪問の終了）の上限（分）
+export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, shift = 0, trimEnd = 0, maxMinutes = 600, maxSpan = Infinity, fixed = {} } = {}) {
   const assign = {};
   const unassigned = [];
   const tight = {};
@@ -64,7 +65,12 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
     const len = v => v.range[1] - v.range[0];
     const clash = (n, v, gap = buffer) => busy[n].filter(b =>
       !(v.range[1] + gap <= b.s || b.e + gap <= v.range[0]));
-    const fits = (n, v, gap = buffer) => !clash(n, v, gap).length && today[n] + len(v) <= maxMinutes;
+    const spanOk = (n, v, except) => {
+      const rest = busy[n].filter(b => b.v !== except);
+      if (!rest.length) return true;
+      return Math.max(v.range[1], ...rest.map(b => b.e)) - Math.min(v.range[0], ...rest.map(b => b.s)) <= maxSpan;
+    };
+    const fits = (n, v, gap = buffer) => !clash(n, v, gap).length && today[n] + len(v) <= maxMinutes && spanOk(n, v);
     const put = (v, n) => {
       (busy[n] ??= []).push({ s: v.range[0], e: v.range[1], v });
       today[n] = (today[n] ?? 0) + len(v);
@@ -82,10 +88,16 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
     for (const v of list.filter(v => !fixed[v.key])) {
       const free = people.filter(n => fits(n, v));
       if (!free.length) { left.push(v); continue; }
+      // 拘束時間に上限があるときは、働いている人の時間帯をつなげ、間があくなら別の人を入れる
+      const spanGrow = n => {
+        if (!busy[n].length) return len(v) + 60;
+        const s0 = Math.min(...busy[n].map(b => b.s)), e0 = Math.max(...busy[n].map(b => b.e));
+        return Math.max(e0, v.range[1]) - Math.min(s0, v.range[0]) - (e0 - s0);
+      };
       const score = n =>
         (regular[v.slot] === n ? 40 : 0) +
         Math.min(familiar[v.userId]?.[n] ?? 0, 10) * 1.5 -
-        today[n] / 60 * 6 -
+        (maxSpan < Infinity ? spanGrow(n) / 60 * 12 + today[n] / 60 * 1 : today[n] / 60 * 6) -
         (load[n]?.minutes ?? 0) / 60 * 0.4;
       free.sort((a, b) => score(b) - score(a) || a.localeCompare(b));
       put(v, free[0]);
@@ -106,7 +118,7 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
         if (fixed[c.key] || c.range[0] >= v.range[0]) continue;
         const need = c.range[1] + gap - v.range[0];
         const dur = len(c);
-        if (need < 1 || need + (trimmed[c.key] ?? 0) > trimEnd || today[n] + len(v) > maxMinutes) continue;
+        if (need < 1 || need + (trimmed[c.key] ?? 0) > trimEnd || today[n] + len(v) > maxMinutes || !spanOk(n, v)) continue;
         if (BANDS.some(t => dur >= t && dur - need < t)) continue;
         const orig = c.range;
         remove(c, n);
@@ -127,7 +139,7 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
         const c = blocking[0].v;
         if (fixed[c.key] || c.range[0] >= v.range[0]) continue;
         const need = c.range[1] + gap - v.range[0];
-        if (need < 1 || need + (shifted[c.key] ?? 0) > shift || today[n] + len(v) > maxMinutes) continue;
+        if (need < 1 || need + (shifted[c.key] ?? 0) > shift || today[n] + len(v) > maxMinutes || !spanOk(n, v)) continue;
         const orig = c.range;
         remove(c, n);
         c.range = [orig[0] - need, orig[1] - need];
@@ -144,7 +156,7 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
         const blocking = clash(n, v, gap);
         if (blocking.length !== 1 || fixed[blocking[0].v.key]) continue;
         const c = blocking[0].v;
-        if (today[n] - len(c) + len(v) > maxMinutes) continue;
+        if (today[n] - len(c) + len(v) > maxMinutes || !spanOk(n, v, c)) continue;
         const other = people.find(m => m !== n && fits(m, c, gap));
         if (!other) continue;
         remove(c, n);

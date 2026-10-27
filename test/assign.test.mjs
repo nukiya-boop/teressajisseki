@@ -115,3 +115,15 @@ test('ちょうど続く訪問は、前の訪問の終了を1分早めて入れ�
   assert.deepEqual(r.unassigned, ['d']);
   assert.equal(r.trimmed.c, undefined);
 });
+
+test('拘束時間の上限を超えないように振り分ける', () => {
+  const staff = [{ name: 'A', from: '2026-01-01', to: '' }, { name: 'B', from: '2026-01-01', to: '' }];
+  const visits = [
+    { key: 'm', date: '2026-07-01', start: '07:00', end: '07:20', userId: 'U1', slot: 'U1' },
+    { key: 'n', date: '2026-07-01', start: '22:00', end: '22:20', userId: 'U1', slot: 'U1n' },
+  ];
+  const r = assignStaff(visits, staff, { buffer: 1, maxSpan: 13 * 60 });
+  assert.notEqual(r.assign.m, r.assign.n);
+  const one = assignStaff(visits, [staff[0]], { buffer: 1, maxSpan: 13 * 60 });
+  assert.deepEqual(one.unassigned, ['n']);
+});

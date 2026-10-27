@@ -77,6 +77,7 @@
         <label title="0なら前倒ししません。開始は予定より遅らせません">前倒し 最大 <input type="number" id="shiftMax" min="0" max="10" value="0"> 分</label>
         <label title="続けて入る訪問で、前の訪問の終了を早めてよい分数。時間区分が変わる場合は早めません">終了を早める 最大 <input type="number" id="trimEnd" min="0" max="10" value="1"> 分</label>
         <label>1日の上限 <input type="number" id="maxHours" min="1" max="24" value="10"> 時間</label>
+        <label title="その日の最初の訪問の開始から最後の訪問の終了まで。空欄なら制限なし">拘束時間の上限 <input type="number" id="maxSpan" min="1" max="24" placeholder="なし"> 時間</label>
         <button id="applyStaff">反映</button>
         <span id="staffStatus" class="hint"></span>
       </div>
