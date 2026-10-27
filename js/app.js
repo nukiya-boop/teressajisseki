@@ -563,10 +563,10 @@ function assignHelpers(list) {
   if (!staff.length) { for (const r of list) r.staffNote = r.timeNote; return; }
   const fixed = {};
   const visits = [];
-  // 実績を取り込んだ利用者・月は、実績のない予定（行わなかった訪問）には割り当てない
-  const withActual = new Set(list.filter(r => r.actualStart).map(r => r.userId));
+  // 実績を取り込んだ月は、実績のない予定（行わなかった訪問）には割り当てない
+  const hasActual = list.some(r => r.actualStart);
   for (const r of list) {
-    if (!r.actualStart && withActual.has(r.userId)) { r.staffNote = '実績なし'; continue; }
+    if (!r.actualStart && hasActual) { r.staffNote = '実績なし'; continue; }
     const manual = state.records[r.key]?.staff;
     if (manual) r.staff = manual;
     if (r.staff) fixed[r.key] = r.staff;
@@ -578,7 +578,7 @@ function assignHelpers(list) {
     maxSpan: Number(state.maxSpan ?? 0) * 60 || Infinity, maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
   });
   for (const r of list) {
-    if (!r.actualStart && withActual.has(r.userId)) continue;
+    if (!r.actualStart && hasActual) continue;
     if (!r.staff && result.assign[r.key]) { r.staff = result.assign[r.key]; r.staffAuto = true; }
     const notes = r.timeNote ? [r.timeNote] : [];
     if (result.tight[r.key] !== undefined) notes.push(`前後の訪問との移動時間 ${result.tight[r.key]}分`);
@@ -608,7 +608,8 @@ function drawStaff() {
   if (!staffLoad) { box.innerHTML = ''; $('#staffStatus').textContent = ''; return; }
   const { load, unassigned, staff } = staffLoad;
   const tight = Object.keys(staffLoad.tight).length, shifted = Object.keys(staffLoad.shifted).length;
-  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て（うち移動時間を詰めたもの${tight}件${shifted ? `、前倒ししたもの${shifted}件` : ''}${Object.keys(staffLoad.trimmed).length ? `、終了を早めたもの${Object.keys(staffLoad.trimmed).length}件` : ''}）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
+  const target = rows.filter(r => r.staffNote !== '実績なし').length;
+  $('#staffStatus').textContent = `${monthInput.value}：${target - unassigned.length}件を割り当て（うち移動時間を詰めたもの${tight}件${shifted ? `、前倒ししたもの${shifted}件` : ''}${Object.keys(staffLoad.trimmed).length ? `、終了を早めたもの${Object.keys(staffLoad.trimmed).length}件` : ''}）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
   const [y, m] = monthInput.value.split('-').map(Number);
   const first = `${monthInput.value}-01`, last = `${monthInput.value}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   const shown = staff.filter(p => p.from <= last && (!p.to || p.to >= first));
