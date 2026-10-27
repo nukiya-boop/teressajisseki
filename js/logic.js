@@ -36,6 +36,39 @@ export const STATUS = {
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
+// サービスコードの時間区分（分）。わからないときは null
+const BANDS = [
+  [/^身体介護０１|^身体介護01/, 0, 19],
+  [/^身体介護１|^身体介護1(?!\d)/, 20, 29],
+  [/^身体介護２|^身体介護2/, 30, 59],
+  [/^身体介護３|^身体介護3/, 60, 89],
+  [/^身体介護４|^身体介護4/, 90, 119],
+  [/^生活援助２|^生活援助2/, 20, 44],
+  [/^生活援助３|^生活援助3/, 45, Infinity],
+];
+
+export function serviceBand(service) {
+  const b = BANDS.find(([re]) => re.test(String(service ?? '')));
+  return b ? { min: b[1], max: b[2] } : null;
+}
+
+// 記録の時間をサービスコードの時間区分にそろえる。
+// 区分の上限を1分だけ超えるもの（「20分未満」なのに 17:00〜17:20 など）は終了を1分早める。
+// それ以上ずれるものや終了が開始以前のものは、時間はそのままで要確認のメモを返す。
+export function alignToBand(service, start, end) {
+  const s = toMinutes(start), e = toMinutes(end);
+  if (!(e > s)) return { end, note: '終了が開始以前（利用票を要確認）' };
+  const band = serviceBand(service);
+  if (!band) return { end, note: '' };
+  const d = e - s;
+  if (d === band.max + 1) {
+    const m = s + band.max;
+    return { end: `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`, note: `時間区分に合わせ終了を1分早めた（${d}分→${band.max}分）` };
+  }
+  if (d > band.max || d < band.min) return { end, note: `時間（${d}分）とサービスコードが合わない（要確認）` };
+  return { end, note: '' };
+}
+
 export function toMinutes(t) {
   const m = /^(\d{1,2}):?(\d{2})$/.exec(String(t).trim());
   return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;

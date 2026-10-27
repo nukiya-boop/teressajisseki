@@ -1,5 +1,5 @@
 import { parseRecords, toCSV, decodeFile } from './csv.js';
-import { ALIASES, STATUS, reconcile, confirmPlanned, summarize } from './logic.js';
+import { ALIASES, STATUS, reconcile, confirmPlanned, summarize, alignToBand } from './logic.js';
 import { ITEMS, CARE_LEVELS, WEEKDAYS, detectProfile, resolveItems, generateComment, slotKey } from './record.js';
 import { readDocument, normalizeName } from './pdfimport.js';
 import { recordCard } from './form.js';
@@ -505,6 +505,7 @@ function render() {
     (slotDays[k] ??= new Set()).add(new Date(`${r.date}T00:00:00`).getDay());
   }
   rows = base.map(r => withRecord(r, slotCounts, slotDays, weeks));
+  alignTimes(rows);
   assignHelpers(rows);
 
   const counts = summarize(rows);
@@ -525,19 +526,30 @@ function toMin(t) {
   return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
 }
 
+// 実績のない訪問は、記録の時間をサービスコードの時間区分にそろえる
+function alignTimes(list) {
+  for (const r of list) {
+    r.timeNote = '';
+    if (r.actualStart) continue;
+    const a = alignToBand(r.service, r.planStart, r.planEnd);
+    if (a.end !== r.planEnd) { r.recStart = r.planStart; r.recEnd = a.end; }
+    r.timeNote = a.note;
+  }
+}
+
 // シフト・実績・手入力で担当者が決まっていない訪問に、ヘルパーを自動で割り当てる
 let staffLoad = null;
 function assignHelpers(list) {
   const staff = parseStaff(state.staffText);
   staffLoad = null;
-  if (!staff.length) return;
+  if (!staff.length) { for (const r of list) r.staffNote = r.timeNote; return; }
   const fixed = {};
   const visits = [];
   for (const r of list) {
     const manual = state.records[r.key]?.staff;
     if (manual) r.staff = manual;
     if (r.staff) fixed[r.key] = r.staff;
-    visits.push({ key: r.key, date: r.date, start: r.actualStart || r.planStart, end: r.actualEnd || r.planEnd, userId: r.userId, slot: `${r.userId}|${slotKey(r.planStart || r.actualStart, r.service)}` });
+    visits.push({ key: r.key, date: r.date, start: r.recStart || r.actualStart || r.planStart, end: r.recEnd || r.actualEnd || r.planEnd, userId: r.userId, slot: `${r.userId}|${slotKey(r.planStart || r.actualStart, r.service)}` });
   }
   const result = assignBest(visits, staff, {
     buffer: Number(state.buffer ?? 1), minBuffer: Number(state.minBuffer ?? state.buffer ?? 1),
@@ -546,14 +558,14 @@ function assignHelpers(list) {
   });
   for (const r of list) {
     if (!r.staff && result.assign[r.key]) { r.staff = result.assign[r.key]; r.staffAuto = true; }
-    const notes = [];
+    const notes = r.timeNote ? [r.timeNote] : [];
     if (result.tight[r.key] !== undefined) notes.push(`前後の訪問との移動時間 ${result.tight[r.key]}分`);
     const o = result.shifted[r.key];
     if (o) {
       // 提供時間の長さはそのままで前倒し（開始は遅らせない）
       const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-      r.recStart = fmt(toMin(r.actualStart || r.planStart) - o);
-      r.recEnd = fmt(toMin(r.actualEnd || r.planEnd) - o);
+      r.recStart = fmt(toMin(r.recStart || r.actualStart || r.planStart) - o);
+      r.recEnd = fmt(toMin(r.recEnd || r.actualEnd || r.planEnd) - o);
       notes.push(`予定より${o}分前倒しして割り当て`);
     }
     const t = result.trimmed[r.key];

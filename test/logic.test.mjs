@@ -50,3 +50,16 @@ test('日本語見出しのCSV・タブ区切りを読み込める', () => {
   const tsv = '日付\t担当者\t出勤\t退勤\n2026/11/02\t佐藤\t9:00\t17:00';
   assert.equal(parseRecords(tsv, ALIASES.shift)[0].staff, '佐藤');
 });
+
+test('記録の時間をサービスコードの時間区分にそろえる', async () => {
+  const { alignToBand, serviceBand } = await import('../js/logic.js');
+  assert.deepEqual(serviceBand('身体介護０１・夜'), { min: 0, max: 19 });
+  assert.deepEqual(serviceBand('身体介護１'), { min: 20, max: 29 });
+  assert.equal(alignToBand('身体介護０１', '17:00', '17:20').end, '17:19');
+  assert.equal(alignToBand('身体介護２', '14:30', '15:30').end, '15:29');
+  assert.equal(alignToBand('身体介護０１', '08:00', '08:15').note, '');
+  const big = alignToBand('身体介護０１・夜', '18:00', '18:29');
+  assert.equal(big.end, '18:29');
+  assert.match(big.note, /要確認/);
+  assert.match(alignToBand('身体介護０１・夜', '20:20', '20:15').note, /終了が開始以前/);
+});
