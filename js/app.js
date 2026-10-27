@@ -25,6 +25,7 @@ $('#tolerance').value = state.tolerance ?? 4;
 $('#maxHours').value = state.maxHours ?? 10;
 $('#minBuffer').value = state.minBuffer ?? state.buffer ?? 1;
 $('#shiftMax').value = state.shiftMax ?? 0;
+$('#trimEnd').value = state.trimEnd ?? 1;
 
 // 利用者が多いと localStorage（約5MB）に収まらないため、IndexedDB に保存する
 function openDb() {
@@ -539,7 +540,7 @@ function assignHelpers(list) {
   }
   const result = assignBest(visits, staff, {
     buffer: Number(state.buffer ?? 1), minBuffer: Number(state.minBuffer ?? state.buffer ?? 1),
-    shift: Number(state.shiftMax ?? 0), maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
+    shift: Number(state.shiftMax ?? 0), trimEnd: Number(state.trimEnd ?? 1), maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
   });
   for (const r of list) {
     if (!r.staff && result.assign[r.key]) { r.staff = result.assign[r.key]; r.staffAuto = true; }
@@ -553,6 +554,13 @@ function assignHelpers(list) {
       r.recEnd = fmt(toMin(r.actualEnd || r.planEnd) - o);
       notes.push(`予定より${o}分前倒しして割り当て`);
     }
+    const t = result.trimmed[r.key];
+    if (t) {
+      const m = toMin(r.recEnd || r.actualEnd || r.planEnd) - t;
+      r.recStart ??= r.actualStart || r.planStart;
+      r.recEnd = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      notes.push(`次の訪問に間に合うよう終了を${t}分早めた`);
+    }
     if (!r.staff) notes.push('空いているヘルパーなし');
     r.staffNote = notes.join('、');
   }
@@ -564,7 +572,7 @@ function drawStaff() {
   if (!staffLoad) { box.innerHTML = ''; $('#staffStatus').textContent = ''; return; }
   const { load, unassigned, staff } = staffLoad;
   const tight = Object.keys(staffLoad.tight).length, shifted = Object.keys(staffLoad.shifted).length;
-  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て（うち移動時間を詰めたもの${tight}件${shifted ? `、前倒ししたもの${shifted}件` : ''}）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
+  $('#staffStatus').textContent = `${monthInput.value}：${rows.length - unassigned.length}件を割り当て（うち移動時間を詰めたもの${tight}件${shifted ? `、前倒ししたもの${shifted}件` : ''}${Object.keys(staffLoad.trimmed).length ? `、終了を早めたもの${Object.keys(staffLoad.trimmed).length}件` : ''}）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
   const [y, m] = monthInput.value.split('-').map(Number);
   const first = `${monthInput.value}-01`, last = `${monthInput.value}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   const shown = staff.filter(p => p.from <= last && (!p.to || p.to >= first));
@@ -580,6 +588,7 @@ $('#applyStaff').addEventListener('click', () => {
   state.maxHours = $('#maxHours').value;
   state.minBuffer = $('#minBuffer').value;
   state.shiftMax = $('#shiftMax').value;
+  state.trimEnd = $('#trimEnd').value;
   save();
   render();
 });

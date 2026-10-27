@@ -26,6 +26,9 @@ export function interval(start, end) {
   return [s, e];
 }
 
+// 訪問介護の時間区分の境目（分）。終了を早めてもこれを下回らないようにする
+const BANDS = [20, 30, 45, 60, 90];
+
 export function activeOn(staff, date) {
   return staff.filter(p => p.from <= date && (!p.to || date <= p.to));
 }
@@ -37,11 +40,14 @@ export function activeOn(staff, date) {
 //        開始は予定より遅らせない。提供時間の長さは変えない
 // 戻り値: { assign: { key: 氏名 }, unassigned: [key], tight: { key: 前の訪問との間隔(分) },
 //          shifted: { key: 開始を早めた分数 }, load: { 氏名: { visits, minutes } } }
-export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, shift = 0, maxMinutes = 600, fixed = {} } = {}) {
+// trimEnd: 直前の訪問の終了をこの分数まで早めて、次の訪問を予定どおりに始める（trimmed に記録）。
+//          時間区分（20・30・45・60・90分）をまたいで短くなる場合は早めない
+export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, shift = 0, trimEnd = 0, maxMinutes = 600, fixed = {} } = {}) {
   const assign = {};
   const unassigned = [];
   const tight = {};
   const shifted = {};
+  const trimmed = {};
   const load = Object.fromEntries(staff.map(p => [p.name, { visits: 0, minutes: 0 }]));
   const regular = {};   // 訪問枠ごとの前回の担当者（同じ人が続けて入るように）
   const familiar = {};  // 利用者ごとの担当回数
@@ -92,6 +98,28 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
       const direct = people.filter(n => fits(n, v, gap))
         .sort((a, b) => today[a] - today[b] || a.localeCompare(b))[0];
       if (direct) { put(v, direct); return true; }
+      // 直前の訪問1件の終了を少し早めれば、この訪問を予定どおりの開始で入れられる
+      for (const n of people) {
+        const blocking = clash(n, v, gap);
+        if (blocking.length !== 1) continue;
+        const c = blocking[0].v;
+        if (fixed[c.key] || c.range[0] >= v.range[0]) continue;
+        const need = c.range[1] + gap - v.range[0];
+        const dur = len(c);
+        if (need < 1 || need + (trimmed[c.key] ?? 0) > trimEnd || today[n] + len(v) > maxMinutes) continue;
+        if (BANDS.some(t => dur >= t && dur - need < t)) continue;
+        const orig = c.range;
+        remove(c, n);
+        c.range = [orig[0], orig[1] - need];
+        if (!clash(n, v, gap).length) {
+          put(c, n);
+          put(v, n);
+          trimmed[c.key] = (trimmed[c.key] ?? 0) + need;
+          return true;
+        }
+        c.range = orig;
+        put(c, n);
+      }
       // 直前の訪問1件を数分前倒しすれば、この訪問を予定どおりの開始で入れられる
       for (const n of people) {
         const blocking = clash(n, v, gap);
@@ -150,7 +178,7 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
       (familiar[v.userId] ??= {})[n] = (familiar[v.userId]?.[n] ?? 0) + 1;
     }
   }
-  return { assign, unassigned, tight, shifted, load };
+  return { assign, unassigned, tight, shifted, trimmed, load };
 }
 
 // 最初に広めの移動時間で組んでから詰めるほうが、朝の訪問に人が偏らず空欄が減ることがある。

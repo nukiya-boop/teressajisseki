@@ -99,3 +99,19 @@ test('続けて入る訪問は、前の訪問を少し前倒しして、次の�
   assert.equal(r.shifted.a, 1);
   assert.equal(r.shifted.b, undefined);
 });
+
+test('ちょうど続く訪問は、前の訪問の終了を1分早めて入れる。時間区分をまたぐときは早めない', () => {
+  const staff = [{ name: 'A', from: '2026-01-01', to: '' }];
+  const visits = [
+    { key: 'a', date: '2026-07-01', start: '08:00', end: '08:15', userId: 'U1', slot: 'U1' },
+    { key: 'b', date: '2026-07-01', start: '08:15', end: '08:30', userId: 'U2', slot: 'U2' },
+    { key: 'c', date: '2026-07-01', start: '09:00', end: '09:20', userId: 'U3', slot: 'U3' },  // 20分ちょうど
+    { key: 'd', date: '2026-07-01', start: '09:20', end: '09:35', userId: 'U4', slot: 'U4' },
+  ];
+  const r = assignStaff(visits, staff, { buffer: 1, trimEnd: 1 });
+  assert.equal(r.assign.b, 'A');
+  assert.equal(r.trimmed.a, 1);
+  assert.equal(r.shifted.b, undefined);
+  assert.deepEqual(r.unassigned, ['d']);
+  assert.equal(r.trimmed.c, undefined);
+});
