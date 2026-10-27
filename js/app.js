@@ -181,7 +181,7 @@ async function importDocs(files) {
     }
     // 被保険者番号のわかる提供票を先に入れ、ほかの書類は名前で同じ利用者に結びつける
     // 利用票は提供票より後に入れて、同じ月なら利用票を残す
-    const rank = d => d.teikyo.length ? (d.teikyo.some(t => t.kind === '利用票') ? 1 : 0) : 2;
+    const rank = d => d.jisseki.length ? 2 : d.teikyo.length ? (d.teikyo.some(t => t.kind === '利用票') ? 1 : 0) : 3;
     docs.sort((a, b) => rank(a.doc) - rank(b.doc));
     for (const { name, doc } of docs) logLine(name, applyDoc(doc));
     status.textContent = `${pdfs.length}件の PDF を読み取りました。`;
@@ -209,9 +209,9 @@ function applyDoc(doc) {
     const p = state.profiles[userId];
     if (t.careLevel) p.careLevel = t.careLevel;
     const current = state.careplan.filter(e => e.userId === userId && e.src === 'teikyo' && e.date.startsWith(t.month));
-    // 同じ月に利用票と提供票があれば、利用票の予定を使う
-    if (kind === '提供票' && current.some(e => e.kind === '利用票')) {
-      notes.push(`サービス提供票 ${t.month}：同じ月の利用票があるため、利用票の予定を使います`);
+    // 実績入りの提供票の予定がいちばん新しい。次に利用票、提供票の順に使う
+    if (current.some(e => e.kind === '実績票') || (kind === '提供票' && current.some(e => e.kind === '利用票'))) {
+      notes.push(`サービス${kind} ${t.month}：同じ月の${current.some(e => e.kind === '実績票') ? '実績入りの提供票' : '利用票'}があるため、そちらの予定を使います`);
     } else {
       const seen = new Set();
       const visits = doc.teikyo.flatMap(x => x.visits)
@@ -223,6 +223,23 @@ function applyDoc(doc) {
       })));
       notes.push(`サービス${kind} ${t.month}：訪問介護の予定 ${visits.length}件`);
     }
+  }
+  // 実績入りの提供票：実績は実績として、予定は予定として入れる（1つの PDF に複数の利用者）
+  for (const j of doc.jisseki) {
+    if (!j.name && !j.insuredNo) continue;
+    const userId = resolveUser(j.name, j.insuredNo);
+    const p = state.profiles[userId];
+    if (j.careLevel) p.careLevel = j.careLevel;
+    const visits = j.visits.filter(v => VISIT_CARE.test(v.service) && (!office || v.office.includes(office)));
+    state.careplan = state.careplan.filter(e => !(e.userId === userId && e.src === 'teikyo' && e.date.startsWith(j.month)));
+    state.careplan.push(...visits.filter(v => v.planned).map(v => ({
+      userId, userName: p.name, date: v.date, start: v.start, end: v.end, service: v.service, code: '', office: v.office, src: 'teikyo', kind: '実績票',
+    })));
+    state.actual = state.actual.filter(a => !(a.userId === userId && a.src === 'jisseki' && String(a.date).startsWith(j.month)));
+    state.actual.push(...visits.filter(v => v.actual).map(v => ({
+      date: v.date, userId, start: v.start, end: v.end, service: v.service, staff: '', src: 'jisseki',
+    })));
+    notes.push(`実績 ${j.month} ${p.name}：予定${visits.filter(v => v.planned).length}件・実績${visits.filter(v => v.actual).length}件`);
   }
   if (doc.homeCarePlan) {
     const userId = resolveUser(doc.homeCarePlan.name || doc.name);
@@ -421,6 +438,7 @@ $('#office').addEventListener('change', e => { state.office = e.target.value; sa
 $('#tolerance').addEventListener('change', e => { state.tolerance = e.target.value; save(); render(); });
 $('#userFilter').addEventListener('change', draw);
 $('#statusFilter').addEventListener('change', draw);
+$('#actualOnly').addEventListener('change', draw);
 
 $('#confirm').addEventListener('click', () => {
   const add = confirmPlanned(rows);
@@ -549,7 +567,7 @@ function assignHelpers(list) {
     const manual = state.records[r.key]?.staff;
     if (manual) r.staff = manual;
     if (r.staff) fixed[r.key] = r.staff;
-    visits.push({ key: r.key, date: r.date, start: r.recStart || r.actualStart || r.planStart, end: r.recEnd || r.actualEnd || r.planEnd, userId: r.userId, slot: `${r.userId}|${slotKey(r.planStart || r.actualStart, r.service)}` });
+    visits.push({ key: r.key, locked: !!r.actualStart, date: r.date, start: r.recStart || r.actualStart || r.planStart, end: r.recEnd || r.actualEnd || r.planEnd, userId: r.userId, slot: `${r.userId}|${slotKey(r.planStart || r.actualStart, r.service)}` });
   }
   const result = assignBest(visits, staff, {
     buffer: Number(state.buffer ?? 1), minBuffer: Number(state.minBuffer ?? state.buffer ?? 1),
@@ -618,7 +636,8 @@ function fillSelect(sel, entries, withAll) {
 
 function visibleRows() {
   const user = $('#userFilter').value, status = $('#statusFilter').value;
-  return rows.filter(r => (!user || r.userId === user) && (!status || r.status === status));
+  const actualOnly = $('#actualOnly')?.checked;
+  return rows.filter(r => (!user || r.userId === user) && (!status || r.status === status) && (!actualOnly || r.actualStart));
 }
 
 function draw() {

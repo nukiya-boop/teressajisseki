@@ -138,7 +138,8 @@ export function reconcile({ plans, shifts, actuals, month, toleranceMin = 10 }) 
     const a = monthActuals[idx];
     const as = toMinutes(a.start), ae = toMinutes(a.end);
     const staff = a.staff || shifts.find(s => covers(s, a.date, as, ae))?.staff || '';
-    const inShift = shifts.some(s => s.staff === staff && covers(s, a.date, as, ae));
+    // シフトを取り込んでいなければ、シフトの確認はしない
+    const inShift = !shifts.length || shifts.some(s => s.staff === staff && covers(s, a.date, as, ae));
     const onTime = Math.abs(as - ps) <= toleranceMin && Math.abs(ae - pe) <= toleranceMin;
     const status = !inShift ? STATUS.NO_SHIFT : !onTime ? STATUS.TIME_DIFF : STATUS.OK;
     rows.push(row(p, a, staff, status));

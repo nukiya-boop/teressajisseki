@@ -33,7 +33,7 @@ export function activeOn(staff, date) {
   return staff.filter(p => p.from <= date && (!p.to || date <= p.to));
 }
 
-// visits: [{ key, date, start, end, userId, slot }]（slot は同じ訪問枠を見分ける文字列）
+// visits: [{ key, date, start, end, userId, slot, locked }]（slot は同じ訪問枠を見分ける文字列、locked は実績の時間で動かせない訪問）
 // fixed: すでに担当者が決まっている訪問 { key: 氏名 }（シフト・手入力）
 // minBuffer: 移動時間をあけて入れられなかった訪問は、移動時間をここまで詰めて入れる（tight に記録）
 // shift: それでも入らなければ、訪問をこの分数まで前倒しして入れる（shifted に記録）。
@@ -115,7 +115,7 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
         const blocking = clash(n, v, gap);
         if (blocking.length !== 1) continue;
         const c = blocking[0].v;
-        if (fixed[c.key] || c.range[0] >= v.range[0]) continue;
+        if (fixed[c.key] || c.locked || c.range[0] >= v.range[0]) continue;
         const need = c.range[1] + gap - v.range[0];
         const dur = len(c);
         if (need < 1 || need + (trimmed[c.key] ?? 0) > trimEnd || today[n] + len(v) > maxMinutes || !spanOk(n, v)) continue;
@@ -137,7 +137,7 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
         const blocking = clash(n, v, gap);
         if (blocking.length !== 1) continue;
         const c = blocking[0].v;
-        if (fixed[c.key] || c.range[0] >= v.range[0]) continue;
+        if (fixed[c.key] || c.locked || c.range[0] >= v.range[0]) continue;
         const need = c.range[1] + gap - v.range[0];
         if (need < 1 || need + (shifted[c.key] ?? 0) > shift || today[n] + len(v) > maxMinutes || !spanOk(n, v)) continue;
         const orig = c.range;
@@ -167,8 +167,8 @@ export function assignStaff(visits, staff, { buffer = 10, minBuffer = buffer, sh
       return false;
     };
     const gaps = [...new Set([buffer, ...Array.from({ length: Math.max(buffer - minBuffer, 0) }, (_, i) => buffer - i - 1)])];
-    const earlier = Array.from({ length: shift + 1 }, (_, i) => i);
     for (const v of left) {
+      const earlier = Array.from({ length: (v.locked ? 0 : shift) + 1 }, (_, i) => i);
       const orig = v.range;
       let gap;
       const offset = earlier.find(o => {

@@ -18,7 +18,7 @@
   <main>
     <section class="docs drop-docs">
       <h2>① 書類を取り込む</h2>
-      <p class="hint">サービス提供票・利用票、ケアプラン（第1〜3表）、訪問介護計画書、アセスメントシートの PDF をまとめてドロップしてください。ZIP のままでも読めます。予定・介護度・援助内容（レ点）を自動で読み取ります。</p>
+      <p class="hint">サービス提供票・利用票（実績入りのものも）、ケアプラン（第1〜3表）、訪問介護計画書、アセスメントシートの PDF をまとめてドロップしてください。ZIP のままでも読めます。予定・介護度・援助内容（レ点）を自動で読み取ります。</p>
       <div class="row">
         <input type="file" id="docFiles" accept=".pdf,.zip" multiple>
         <span id="docStatus" class="hint"></span>
@@ -90,6 +90,7 @@
         <div id="summary"></div>
         <label>利用者 <select id="userFilter"><option value="">すべて</option></select></label>
         <label>状態 <select id="statusFilter"><option value="">すべて</option></select></label>
+        <label><input type="checkbox" id="actualOnly"> 実績のある訪問だけ</label>
         <label title="実績と予定のずれの許容範囲">許容誤差 <input type="number" id="tolerance" min="0" max="60" value="4"> 分</label>
         <button id="confirm" class="secondary">未実績を予定どおり確定</button>
         <button id="export" class="secondary">CSV出力</button>

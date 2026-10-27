@@ -92,3 +92,26 @@ test('アセスメントシートの☑から介護度・認知症自立度を�
   assert.equal(a.dementia, true);
   assert.equal(a.walker, true);
 });
+
+test('実績入りのサービス提供票から、予定と実績の日を読む', async () => {
+  const { parseJisseki, classifyPage } = await import('../js/pdfimport.js');
+  const items = [
+    it(241, 73, '令和'), it(273, 73, '8'), it(287, 73, '年'), it(305, 73, '6'), it(320, 73, '月分'),
+    it(361, 73, 'サービス提供票'), it(628, 72, 'サービス事業所 → 居宅介護支援事業者'),
+    it(32, 126, '被保険者'), it(80, 131, '0'), it(95, 131, '0'), it(110, 131, '1'), it(125, 131, '2'),
+    it(227, 131, '被保険者'), it(287, 136, '介護'), it(310, 136, '太郎'), it(331, 153, '要介護３'),
+    it(32, 250, '14:00'), it(32, 259, '～'), it(43, 259, '14:19'), it(73, 250, '身体介護０１'), it(133, 250, 'テスト介護'),
+    it(303, 250, '予定'), it(303, 261, '実績'),
+  ];
+  // 2026年6月1日は月曜
+  for (let d = 0; d < 30; d++) items.push(it(327 + 15 * d, 216, '月火水木金土日'[d % 7], 9));
+  items.push(it(344, 250, '1', 6), it(359, 250, '1', 6), it(344, 261, '1', 6));
+  assert.equal(classifyPage(items.map(i => i.str).join('') + '実績'), 'jisseki');
+  const j = parseJisseki(items);
+  assert.equal(j.month, '2026-06');
+  assert.equal(j.name, '介護 太郎');
+  assert.equal(j.insuredNo, '0012');
+  assert.equal(j.careLevel, '要介護3');
+  assert.deepEqual(j.visits.map(v => [v.date, v.start, v.end, v.planned, v.actual]),
+    [['2026-06-02', '14:00', '14:19', true, true], ['2026-06-03', '14:00', '14:19', true, false]]);
+});

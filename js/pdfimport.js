@@ -36,6 +36,8 @@ function pad(n) {
 export function classifyPage(text) {
   const t = text.replace(/\s+/g, '');
   if (t.includes('訪問介護計画書')) return 'homecareplan';
+  if (/サービス提供票別表/.test(t)) return 'skip';
+  if (/サービス事業所→居宅介護支援事業者/.test(t) && t.includes('実績')) return 'jisseki';
   if (/サービス(提供|利用)票別表/.test(t)) return 'skip';
   if (/サービス(提供|利用)票/.test(t)) return 'teikyo';
   if (/課題分析標準項目|アセスメントシート/.test(t)) return 'assessment';
@@ -109,6 +111,62 @@ export function parseTeikyo(items) {
   }
   const kind = items.some(it => it.str.replace(/\s/g, '').includes('サービス利用票')) ? '利用票' : '提供票';
   return { month, kind, name, insuredNo, careLevel, visits };
+}
+
+// ---- 実績入りのサービス提供票（サービス事業所 → 居宅介護支援事業者） ----
+
+export function parseJisseki(items) {
+  const lines = toLines(items);
+  const flat = lines.map(l => l.text.replace(/\s/g, ''));
+  const mm = flat.map(t => /令和(\d+)年(\d+)月分/.exec(t)).find(Boolean);
+  if (!mm) return null;
+  const month = `${wareki(mm[1])}-${pad(mm[2])}`;
+
+  const label = items.filter(it => it.str.trim() === '被保険者').sort((a, b) => a.x - b.x || a.y - b.y);
+  const noLabel = label[0], nameLabel = label.find(it => it.x > noLabel.x + 100);
+  const insuredNo = noLabel ? items.filter(it => it.y >= noLabel.y - 2 && it.y <= noLabel.y + 12 &&
+    it.x > noLabel.x + 40 && it.x < (nameLabel?.x ?? noLabel.x + 200) && /^[\d\s]+$/.test(it.str))
+    .sort((a, b) => a.x - b.x).map(it => it.str).join('').replace(/\s/g, '') : '';
+  const name = nameLabel ? items.filter(it => it.y > nameLabel.y + 1 && it.y < nameLabel.y + 12 &&
+    it.x > nameLabel.x + 50 && it.x < nameLabel.x + 380 && !/氏名/.test(it.str))
+    .sort((a, b) => a.x - b.x).map(it => it.str.trim()).filter(Boolean).join(' ') : '';
+  const lv = items.find(it => /^要(介護|支援)[1-5１-５]$/.test(it.str.trim()));
+  const careLevel = lv ? detectCareLevel(lv.str) : '';
+
+  // 曜日の行（いちばん多く曜日が並ぶ行）から日付の列の位置を決める
+  const wdItems = items.filter(it => it.str.trim().length === 1 && WD.includes(it.str.trim()) && it.x > 300);
+  const byY = {};
+  for (const it of wdItems) (byY[Math.round(it.y)] ??= []).push(it);
+  const row = Object.values(byY).sort((a, b) => b.length - a.length)[0] ?? [];
+  const days = row.map(it => it.x + it.w / 2).sort((a, b) => a - b);
+  if (days.length < 28) return { month, kind: '実績票', name, insuredNo, careLevel, visits: [] };
+
+  const marksAt = y => items.filter(it => Math.abs(it.y - y) <= 2 && it.x > days[0] - 8 && it.x < days.at(-1) + 8)
+    .flatMap(tokens).filter(t => Number(t.value) > 0)
+    .map(t => {
+      let best = -1, dist = 8;
+      days.forEach((cx, i) => { if (Math.abs(cx - t.x) < dist) { dist = Math.abs(cx - t.x); best = i; } });
+      return best;
+    }).filter(i => i >= 0);
+
+  const visits = [];
+  const plans = items.filter(it => it.str.trim() === '予定' && it.x > 250 && it.x < days[0]);
+  for (const yotei of plans) {
+    const jisseki = items.find(it => it.str.trim() === '実績' && Math.abs(it.x - yotei.x) < 6 && it.y > yotei.y && it.y < yotei.y + 16);
+    const y0 = yotei.y - 3, y1 = (jisseki?.y ?? yotei.y + 11) + 3;
+    const inRow = (x0, x1) => items.filter(it => it.y >= y0 && it.y <= y1 && it.x >= x0 && it.x < x1)
+      .sort((a, b) => a.y - b.y || a.x - b.x);
+    const times = inRow(0, 70).map(it => /(\d{1,2}:\d{2})/.exec(it.str)?.[1]).filter(Boolean);
+    if (!times[0]) continue;
+    const service = joinText(inRow(70, 130));
+    const office = joinText(inRow(130, yotei.x - 5));
+    const planned = new Set(marksAt(yotei.y));
+    const actual = new Set(jisseki ? marksAt(jisseki.y) : []);
+    for (const d of [...new Set([...planned, ...actual])].sort((a, b) => a - b)) {
+      visits.push({ date: `${month}-${pad(d + 1)}`, start: times[0], end: times[1] ?? '', service, office, planned: planned.has(d), actual: actual.has(d) });
+    }
+  }
+  return { month, kind: '実績票', name, insuredNo, careLevel, visits };
 }
 
 // ---- 訪問介護計画書（事業所作成） ----
@@ -279,16 +337,19 @@ export function parseCarePlan2(items) {
 
 export function readDocument(pages) {
   const kinds = pages.map(items => classifyPage(items.map(it => it.str).join('')));
-  const result = { teikyo: [], homeCarePlan: null, assessment: null, carePlan2: [], text: '' };
+  const result = { teikyo: [], jisseki: [], homeCarePlan: null, assessment: null, carePlan2: [], text: '' };
   const plain = [];
   pages.forEach((items, i) => {
     if (kinds[i] === 'teikyo') {
       const t = parseTeikyo(items);
       if (t) result.teikyo.push(t);
+    } else if (kinds[i] === 'jisseki') {
+      const j = parseJisseki(items);
+      if (j) result.jisseki.push(j);
     } else if (kinds[i] === 'careplan2') {
       result.carePlan2.push(...parseCarePlan2(items));
     }
-    if (kinds[i] !== 'skip' && kinds[i] !== 'teikyo') plain.push(toLines(items).map(l => l.text).join('\n'));
+    if (!['skip', 'teikyo', 'jisseki'].includes(kinds[i])) plain.push(toLines(items).map(l => l.text).join('\n'));
   });
   const hcp = pages.filter((_, i) => kinds[i] === 'homecareplan');
   if (hcp.length) result.homeCarePlan = parseHomeCarePlan(hcp);
