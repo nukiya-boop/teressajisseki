@@ -563,7 +563,10 @@ function assignHelpers(list) {
   if (!staff.length) { for (const r of list) r.staffNote = r.timeNote; return; }
   const fixed = {};
   const visits = [];
+  // 実績を取り込んだ利用者・月は、実績のない予定（行わなかった訪問）には割り当てない
+  const withActual = new Set(list.filter(r => r.actualStart).map(r => r.userId));
   for (const r of list) {
+    if (!r.actualStart && withActual.has(r.userId)) { r.staffNote = '実績なし'; continue; }
     const manual = state.records[r.key]?.staff;
     if (manual) r.staff = manual;
     if (r.staff) fixed[r.key] = r.staff;
@@ -575,6 +578,7 @@ function assignHelpers(list) {
     maxSpan: Number(state.maxSpan ?? 0) * 60 || Infinity, maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,
   });
   for (const r of list) {
+    if (!r.actualStart && withActual.has(r.userId)) continue;
     if (!r.staff && result.assign[r.key]) { r.staff = result.assign[r.key]; r.staffAuto = true; }
     const notes = r.timeNote ? [r.timeNote] : [];
     if (result.tight[r.key] !== undefined) notes.push(`前後の訪問との移動時間 ${result.tight[r.key]}分`);
