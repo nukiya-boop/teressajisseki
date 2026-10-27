@@ -9,56 +9,91 @@
 <body>
   <header>
     <h1>介護実績管理</h1>
-    <label>対象月 <input type="month" id="month"></label>
+    <div class="row">
+      <label>自事業所名 <input id="office" placeholder="空欄なら訪問介護すべて" size="16"></label>
+      <label>対象月 <input type="month" id="month"></label>
+    </div>
   </header>
 
   <main>
-    <section class="inputs">
-      <article class="drop" data-kind="careplan">
-        <h2>① ケアプラン</h2>
-        <p class="hint">利用者ID, 利用者名, 曜日, 開始, 終了, サービス内容, サービスコード</p>
-        <input type="file" accept=".csv,.tsv,.txt">
-        <textarea placeholder="CSVファイルをドロップ、またはExcelから貼り付け"></textarea>
-        <div class="row"><button class="load">反映</button><span class="count"></span><button class="clear secondary">クリア</button></div>
-      </article>
-      <article class="drop" data-kind="shift">
-        <h2>② シフト</h2>
-        <p class="hint">日付, 担当者, 開始, 終了</p>
-        <input type="file" accept=".csv,.tsv,.txt">
-        <textarea placeholder="CSVファイルをドロップ、またはExcelから貼り付け"></textarea>
-        <div class="row"><button class="load">反映</button><span class="count"></span><button class="clear secondary">クリア</button></div>
-      </article>
-      <article class="drop" data-kind="actual">
-        <h2>③ 実績</h2>
-        <p class="hint">日付, 利用者ID, 開始, 終了, サービス内容, 担当者</p>
-        <input type="file" accept=".csv,.tsv,.txt">
-        <textarea placeholder="CSVファイルをドロップ、またはExcelから貼り付け"></textarea>
-        <div class="row"><button class="load">反映</button><span class="count"></span><button class="clear secondary">クリア</button></div>
-      </article>
+    <section class="docs drop-docs">
+      <h2>① 書類を取り込む</h2>
+      <p class="hint">サービス提供票・利用票、ケアプラン（第1〜3表）、訪問介護計画書、アセスメントシートの PDF をまとめてドロップしてください。ZIP のままでも読めます。予定・介護度・援助内容（レ点）を自動で読み取ります。</p>
+      <div class="row">
+        <input type="file" id="docFiles" accept=".pdf,.zip" multiple>
+        <span id="docStatus" class="hint"></span>
+      </div>
+      <ul id="docLog" class="log"></ul>
+    </section>
+
+    <details class="csv">
+      <summary>CSV・Excel で取り込む（ケアプラン・シフト・実績）</summary>
+      <section class="inputs">
+        <article class="drop" data-kind="careplan">
+          <h2>ケアプラン（週間）</h2>
+          <p class="hint">利用者ID, 利用者名, 曜日, 開始, 終了, サービス内容, サービスコード</p>
+          <input type="file" accept=".csv,.tsv,.txt">
+          <textarea placeholder="CSVファイルをドロップ、またはExcelから貼り付け"></textarea>
+          <div class="row"><button class="load">反映</button><span class="count"></span><button class="clear secondary">クリア</button></div>
+        </article>
+        <article class="drop" data-kind="shift">
+          <h2>シフト</h2>
+          <p class="hint">日付, 担当者, 開始, 終了</p>
+          <input type="file" accept=".csv,.tsv,.txt">
+          <textarea placeholder="CSVファイルをドロップ、またはExcelから貼り付け"></textarea>
+          <div class="row"><button class="load">反映</button><span class="count"></span><button class="clear secondary">クリア</button></div>
+        </article>
+        <article class="drop" data-kind="actual">
+          <h2>実績</h2>
+          <p class="hint">日付, 利用者ID, 開始, 終了, サービス内容, 担当者</p>
+          <input type="file" accept=".csv,.tsv,.txt">
+          <textarea placeholder="CSVファイルをドロップ、またはExcelから貼り付け"></textarea>
+          <div class="row"><button class="load">反映</button><span class="count"></span><button class="clear secondary">クリア</button></div>
+        </article>
+      </section>
+    </details>
+
+    <section class="profiles">
+      <h2>② 利用者情報</h2>
+      <div class="row">
+        <label>利用者 <select id="profileUser"></select></label>
+        <button id="deleteUser" class="secondary">この利用者のデータを削除</button>
+      </div>
+      <div id="profileEdit"></div>
+      <details>
+        <summary>計画書の本文を貼り付けて吸い上げる</summary>
+        <textarea id="planText" placeholder="訪問介護計画書・ケアプランの本文をここに貼り付け"></textarea>
+        <div class="row"><button id="extract">吸い上げ</button></div>
+      </details>
     </section>
 
     <section class="result">
+      <h2>③ 実績・サービス実施記録</h2>
       <div class="toolbar">
         <div id="summary"></div>
         <label>利用者 <select id="userFilter"><option value="">すべて</option></select></label>
         <label>状態 <select id="statusFilter"><option value="">すべて</option></select></label>
         <label>許容誤差 <input type="number" id="tolerance" min="0" max="60" value="10"> 分</label>
-        <button id="confirm">未実績を予定どおり確定</button>
+        <button id="confirm" class="secondary">未実績を予定どおり確定</button>
         <button id="export" class="secondary">CSV出力</button>
-        <button id="print" class="secondary">印刷</button>
+        <button id="printRecords">サービス実施記録を印刷</button>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>テレッサ</th><th>日付</th><th>利用者</th><th>サービス</th><th>コード</th>
-            <th>予定</th><th>実績</th><th>担当者</th><th>状態</th>
-          </tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-      <p id="empty" class="hint">ケアプランを反映すると、ここに実績表が表示されます。</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>テレッサ</th><th>日付</th><th>利用者</th><th>サービス</th>
+              <th>予定</th><th>実績</th><th>担当者</th><th>状態</th><th>レ点</th><th>記録コメント</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p id="empty" class="hint">書類を取り込むと、ここに予定と記録が表示されます。行をクリックするとレ点・コメントを直せます。</p>
     </section>
   </main>
+
+  <div id="printArea"></div>
 
   <script type="module" src="js/app.js"></script>
 </body>

@@ -73,7 +73,59 @@ td.mark { text-align: center; font-size: 16px; color: var(--ok-text); font-weigh
 .badge.plan { background: var(--plan); color: var(--plan-text); }
 .badge.ng { background: var(--ng); color: var(--ng-text); }
 
+
+.profiles { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+.profile-form { display: grid; gap: 8px; border-radius: 6px; }
+.profile-form.over { outline: 2px dashed var(--accent); }
+.profile-form textarea, tr.detail textarea {
+  width: 100%; min-height: 70px; resize: vertical; font: inherit;
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px;
+}
+.checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+.checks fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 0; padding: 6px 10px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.checks legend { color: var(--muted); font-size: 12px; padding: 0 4px; }
+.checks label { white-space: nowrap; }
+
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--bg); }
+tr.detail td { background: var(--bg); white-space: normal; }
+tr.detail td > * + * { margin-top: 8px; }
+td.items { white-space: normal; min-width: 160px; }
+.chip { display: inline-block; margin: 1px 2px; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; }
+td.comment { white-space: normal; min-width: 280px; max-width: 420px; font-size: 13px; }
+
+
+.docs { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+.docs.over { outline: 2px dashed var(--accent); }
+.log { margin: 0; padding-left: 18px; font-size: 12px; max-height: 220px; overflow: auto; }
+.log li.error { color: var(--ng-text); }
+details.csv > summary, .profiles summary { cursor: pointer; color: var(--muted); }
+details.csv[open] > .inputs { margin-top: 12px; }
+.row.wrap { flex-wrap: wrap; }
+header .row { gap: 16px; flex-wrap: wrap; }
+.table-wrap { overflow-x: auto; }
+table.slots { margin-top: 4px; }
+.result h2, .profiles h2, .docs h2 { margin-bottom: 4px; }
+
+#printArea { display: none; }
 @media print {
-  header label, .inputs, .toolbar label, .toolbar button { display: none; }
-  body, .result { background: #fff; color: #000; border: 0; }
+  @page { size: A4 portrait; margin: 8mm; }
+  body.printing > :not(#printArea) { display: none !important; }
+  body.printing #printArea { display: block; }
+  body { background: #fff; color: #000; }
+  .rec {
+    height: 136mm; box-sizing: border-box; border: 1.5px solid #000; padding: 3mm 4mm; margin-bottom: 4mm;
+    break-inside: avoid; font-size: 9pt; line-height: 1.35; color: #000; overflow: hidden;
+  }
+  .rec:nth-child(2n) { break-after: page; }
+  .rec header { display: flex; justify-content: space-between; border: 0; padding: 0 0 1mm; background: none; }
+  .rec header b { font-size: 12pt; }
+  .rec-line { display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding: 0.6mm 0; }
+  .rec-line u { text-decoration: none; border-bottom: 1px solid #000; padding: 0 3mm; }
+  .rec-line u.blank { display: inline-block; min-width: 35mm; }
+  .rec-body { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-top: 1mm; }
+  .rec .g { border-bottom: 1px dotted #888; padding: 0.4mm 0; }
+  .rec .gname { display: inline-block; min-width: 23mm; margin-right: 1mm; font-weight: 700; }
+  .rec .cb { display: inline-block; margin-right: 2.2mm; white-space: nowrap; }
+  .rec-comment { margin-top: 1.5mm; border: 1px solid #000; padding: 1mm 1.5mm; min-height: 22mm; }
 }

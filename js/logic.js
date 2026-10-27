@@ -51,18 +51,21 @@ function weekdayIndexes(text) {
 }
 
 // 週間ケアプランを指定月 (YYYY-MM) の日付ごとの予定に展開する。
+// 日付つきの予定（サービス提供票から読んだもの）はその日だけに置く。
 export function expandPlans(plans, month) {
+  const dated = plans.filter(p => p.date);
+  const weekly = plans.filter(p => !p.date);
   const [y, m] = month.split('-').map(Number);
   const days = new Date(y, m, 0).getDate();
   const out = [];
   for (let d = 1; d <= days; d++) {
     const wd = new Date(y, m - 1, d).getDay();
     const date = `${month}-${String(d).padStart(2, '0')}`;
-    for (const p of plans) {
+    for (const p of weekly) {
       if (weekdayIndexes(p.weekday).includes(wd)) out.push({ ...p, date });
     }
   }
-  return out;
+  return [...out, ...dated.filter(p => p.date.startsWith(month))];
 }
 
 function covers(shift, date, start, end) {
@@ -71,6 +74,8 @@ function covers(shift, date, start, end) {
 }
 
 function overlaps(a1, a2, b1, b2) {
+  if (a2 <= a1) a2 += 1440;
+  if (b2 <= b1) b2 += 1440;
   return a1 < b2 && b1 < a2;
 }
 
@@ -124,6 +129,7 @@ function row(p, a, staff, status) {
     userName: p.userName ?? '',
     service: a?.service || p.service || '',
     code: p.code ?? '',
+    office: p.office ?? '',
     planStart: p.start ?? '',
     planEnd: p.end ?? '',
     actualStart: a?.start ?? '',
