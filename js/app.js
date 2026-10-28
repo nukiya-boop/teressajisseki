@@ -439,6 +439,7 @@ $('#tolerance').addEventListener('change', e => { state.tolerance = e.target.val
 $('#userFilter').addEventListener('change', draw);
 $('#statusFilter').addEventListener('change', draw);
 $('#actualOnly').addEventListener('change', draw);
+$('#noStaffOnly').addEventListener('change', draw);
 
 $('#confirm').addEventListener('click', () => {
   const add = confirmPlanned(rows);
@@ -641,8 +642,9 @@ function fillSelect(sel, entries, withAll) {
 
 function visibleRows() {
   const user = $('#userFilter').value, status = $('#statusFilter').value;
-  const actualOnly = $('#actualOnly')?.checked;
-  return rows.filter(r => (!user || r.userId === user) && (!status || r.status === status) && (!actualOnly || r.actualStart));
+  const actualOnly = $('#actualOnly')?.checked, noStaffOnly = $('#noStaffOnly')?.checked;
+  return rows.filter(r => (!user || r.userId === user) && (!status || r.status === status) &&
+    (!actualOnly || r.actualStart) && (!noStaffOnly || !r.staff));
 }
 
 function draw() {
