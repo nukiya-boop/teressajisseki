@@ -130,3 +130,18 @@ test('貼り付けたケアプラン第2表の本文から、行ごとの援助�
   assert.deepEqual(rows[2].items, ['整容', '起床介助', '就寝介助']);
   assert.equal(rows[2].perWeek, 7);
 });
+
+test('計画書がないときは、入浴を30分未満の訪問に、起床介助を9時以降の訪問につけない', async () => {
+  const { resolveItems } = await import('../js/record.js');
+  const profile = { careLevel: '要介護5', carePlans: [{ date: '2026-02-01', rows: [
+    { items: ['全身浴', '洗髪', '更衣介助', '水分補給'], perWeek: 2 },
+    { items: ['整容', '起床介助', '就寝介助'], perWeek: 7 },
+  ] }] };
+  const all = [0, 1, 2, 3, 4, 5, 6];
+  const short = resolveItems({ profile, date: '2026-02-03', start: '12:30', service: '身体介護０１', slotPerWeek: 7, slotWeekdays: all });
+  assert.ok(!short.items.includes('全身浴'));
+  const morning = resolveItems({ profile, date: '2026-02-03', start: '06:30', service: '身体介護０１・夜', slotPerWeek: 7, slotWeekdays: all });
+  assert.ok(morning.items.includes('起床介助') && !morning.items.includes('全身浴'));
+  const bath = resolveItems({ profile, date: '2026-02-03', start: '09:30', service: '身体介護２', slotPerWeek: 3, slotWeekdays: [2, 4, 6] });
+  assert.ok(!bath.items.includes('起床介助'));
+});

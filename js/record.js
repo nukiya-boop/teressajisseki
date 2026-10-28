@@ -114,8 +114,9 @@ function categoriesFor(service) {
   return ['body', 'life', 'common', 'exit'];
 }
 
-function timeOk(item, startMin) {
-  if (item.time === 'morning') return startMin < 11 * 60;
+// strict: 訪問介護計画書がなく時間帯だけで判断するときは、起床介助を9時前の訪問に限る
+function timeOk(item, startMin, strict = false) {
+  if (item.time === 'morning') return startMin < (strict ? 9 : 11) * 60;
   if (item.time === 'night') return startMin >= 18 * 60;
   return true;
 }
@@ -191,6 +192,9 @@ export function carePlanFor(profile, date) {
 
 const MON_FIRST = [1, 2, 3, 4, 5, 6, 0];
 
+// 30分未満の身体介護（身体介護０１・身体介護１）
+const SHORT_BODY = /身体介護(０１|01|１|1)(?![0-9０-９])/;
+
 // どの援助にも付いてくる項目。ケアプランの行と訪問枠を結びつける手がかりにはしない
 const SUPPORTING = new Set(['更衣介助', '水分補給', '顔色・発汗・体温等', '環境整備']);
 
@@ -237,15 +241,15 @@ export function resolveItems({ profile, date, start, service, slotPerWeek = 7, s
       }
       // 起床・就寝の行に書かれた項目は、朝・夜の枠にだけつける
       const rowTime = row.items.some(n => ITEM[n]?.time);
-      if (rowTime && !row.items.some(n => ITEM[n]?.time && timeOk(ITEM[n], startMin))) {
+      if (rowTime && !row.items.some(n => ITEM[n]?.time && timeOk(ITEM[n], startMin, !slot))) {
         row.items.forEach(n => gated.add(n));
         continue;
       }
-      const usable = row.items.filter(n => ITEM[n] && cats.includes(ITEM[n].cat) && timeOk(ITEM[n], startMin));
+      const usable = row.items.filter(n => ITEM[n] && cats.includes(ITEM[n].cat) && timeOk(ITEM[n], startMin, !slot));
       if (row.perWeek != null && row.perWeek < slotPerWeek - 0.5) {
         usable.forEach(n => gated.add(n));
-        // 計画書がないときは、回数の少ない援助（入浴など）を夜の訪問には当てない
-        if (!slot && startMin >= 18 * 60) continue;
+        // 計画書がないときは、回数の少ない援助（入浴など）を夜の訪問や30分未満の身体介護には当てない
+        if (!slot && (startMin >= 18 * 60 || SHORT_BODY.test(service))) continue;
         if (!scheduledDays(profile, row.items, row.perWeek, slotWeekdays, date).includes(wd)) continue;
       }
       usable.forEach(n => set.add(n));
