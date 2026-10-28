@@ -127,3 +127,19 @@ test('拘束時間の上限を超えないように振り分ける', () => {
   const one = assignStaff(visits, [staff[0]], { buffer: 1, maxSpan: 13 * 60 });
   assert.deepEqual(one.unassigned, ['n']);
 });
+
+test('補充のヘルパーは、ほかのヘルパーで埋まらなかった訪問だけに入る', async () => {
+  const { assignWithBackup } = await import('../js/assign.js');
+  const staff = parseStaff('介護花子 2026年2月1日〜現在\n応援一郎 2026年7月1日〜現在 介護福祉士 補充');
+  assert.deepEqual(staff[1], { name: '応援一郎', from: '2026-07-01', to: '', note: '介護福祉士 補充', backup: true });
+  const visits = [
+    { key: 'a', date: '2026-07-01', start: '14:00', end: '14:30', userId: 'U1', slot: 'U1' },
+    { key: 'b', date: '2026-07-01', start: '14:10', end: '14:40', userId: 'U2', slot: 'U2' },
+    { key: 'c', date: '2026-07-01', start: '16:00', end: '16:30', userId: 'U3', slot: 'U3' },
+  ];
+  const r = assignWithBackup(visits, staff, { buffer: 1 });
+  assert.equal(r.assign.a, '介護花子');
+  assert.equal(r.assign.b, '応援一郎');
+  assert.equal(r.assign.c, '介護花子');
+  assert.deepEqual(r.unassigned, []);
+});

@@ -3,7 +3,7 @@ import { ALIASES, STATUS, reconcile, confirmPlanned, summarize, alignToBand } fr
 import { ITEMS, CARE_LEVELS, WEEKDAYS, detectProfile, resolveItems, generateComment, slotKey } from './record.js';
 import { readDocument, normalizeName } from './pdfimport.js';
 import { recordCard } from './form.js';
-import { parseStaff, assignBest } from './assign.js';
+import { parseStaff, assignWithBackup } from './assign.js';
 
 const STORE_KEY = 'teressajisseki:v1';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -572,7 +572,7 @@ function assignHelpers(list) {
     if (r.staff) fixed[r.key] = r.staff;
     visits.push({ key: r.key, locked: !!r.actualStart, date: r.date, start: r.recStart || r.actualStart || r.planStart, end: r.recEnd || r.actualEnd || r.planEnd, userId: r.userId, slot: `${r.userId}|${slotKey(r.planStart || r.actualStart, r.service)}` });
   }
-  const result = assignBest(visits, staff, {
+  const result = assignWithBackup(visits, staff, {
     buffer: Number(state.buffer ?? 1), minBuffer: Number(state.minBuffer ?? state.buffer ?? 1),
     shift: Number(state.shiftMax ?? 0), trimEnd: Number(state.trimEnd ?? 1),
     maxSpan: Number(state.maxSpan ?? 0) * 60 || Infinity, maxMinutes: Number(state.maxHours ?? 10) * 60, fixed,

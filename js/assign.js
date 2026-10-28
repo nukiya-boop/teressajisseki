@@ -1,14 +1,19 @@
 // ヘルパーの自動振り分け。在籍期間内で、同じ時間に2か所へ行かないように割り当てる。
 
-// 「山田太郎 2026年2月1日〜現在」「山田花子 2026年2月1日〜6月30日」のような行を読む
+// 「山田太郎 2026年2月1日〜現在」「山田花子 2026年2月1日〜6月30日」のような行を読む。
+// 後ろに「補充」「応援」と書いた人は、ほかのヘルパーで埋まらなかった訪問だけに入る（backup）
 export function parseStaff(text) {
   const out = [];
   for (const line of String(text ?? '').split(/\r?\n/)) {
-    const m = /^\s*(.+?)[\s\t,]+(\d{4})年(\d{1,2})月(\d{1,2})日\s*[〜～~\-ー]\s*(現在|(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日)?\s*$/.exec(line);
+    const m = /^\s*(.+?)[\s\t,]+(\d{4})年(\d{1,2})月(\d{1,2})日\s*[〜～~\-ー]\s*(現在|(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日)?\s*(.*)$/.exec(line);
     if (!m) continue;
     const from = `${m[2]}-${m[3].padStart(2, '0')}-${m[4].padStart(2, '0')}`;
     const to = m[7] ? `${m[6] ?? m[2]}-${m[7].padStart(2, '0')}-${m[8].padStart(2, '0')}` : '';
-    out.push({ name: m[1].trim(), from, to });
+    const note = m[9].trim();
+    const p = { name: m[1].trim(), from, to };
+    if (note) p.note = note;
+    if (/補充|応援/.test(note)) p.backup = true;
+    out.push(p);
   }
   return out;
 }
@@ -206,4 +211,24 @@ export function assignBest(visits, staff, opts = {}) {
     if (!best || r.unassigned.length < best.unassigned.length) best = r;
   }
   return best;
+}
+
+// 通常のヘルパーで振り分けてから、残った訪問だけに補充のヘルパーを入れる（通常の割り当ては変えない）
+export function assignWithBackup(visits, staff, opts = {}) {
+  const main = staff.filter(p => !p.backup);
+  const backup = staff.filter(p => p.backup);
+  const first = assignBest(visits, main, opts);
+  if (!backup.length || !first.unassigned.length) return first;
+  const left = new Set(first.unassigned);
+  const second = assignStaff(visits.filter(v => left.has(v.key)), backup, { ...opts, fixed: {} });
+  const load = { ...first.load };
+  for (const [n, l] of Object.entries(second.load)) if (l.visits) load[n] = l;
+  return {
+    assign: { ...first.assign, ...second.assign },
+    unassigned: second.unassigned,
+    tight: { ...first.tight, ...second.tight },
+    shifted: { ...first.shifted, ...second.shifted },
+    trimmed: { ...first.trimmed, ...second.trimmed },
+    load,
+  };
 }
