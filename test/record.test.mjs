@@ -117,3 +117,16 @@ test('コメントは季節・ADL・時間帯で変わり、長くなりすぎ�
   const night = generateComment({ profile, items: ['就寝介助'], seed: 'n', start: '20:00', date: '2026-07-01' });
   assert.doesNotMatch(night, /おはよう|昼食/);
 });
+
+test('貼り付けたケアプラン第2表の本文から、行ごとの援助内容と頻度を読む', async () => {
+  const { detectPlanRows } = await import('../js/record.js');
+  const rows = detectPlanRows(`処方薬の説明管理、服薬管理 居宅療養管理指導 月に4回
+入浴前準備、更衣介助、洗身洗髪介助、水分補給、入浴後の後片付け等。 訪問介護 週に2回
+掃除、洗濯、シーツ交換等の身の回りの家事を支援。 訪問介護 週に2回
+起床介助、就寝介助、整容介助等。 訪問介護 毎日`);
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].perWeek, 2);
+  assert.ok(rows[0].items.includes('全身浴'));
+  assert.deepEqual(rows[2].items, ['整容', '起床介助', '就寝介助']);
+  assert.equal(rows[2].perWeek, 7);
+});

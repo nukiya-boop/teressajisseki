@@ -1,6 +1,6 @@
 import { parseRecords, toCSV, decodeFile } from './csv.js';
 import { ALIASES, STATUS, reconcile, confirmPlanned, summarize, alignToBand } from './logic.js';
-import { ITEMS, CARE_LEVELS, WEEKDAYS, detectProfile, resolveItems, generateComment, slotKey } from './record.js';
+import { ITEMS, CARE_LEVELS, WEEKDAYS, detectProfile, detectPlanRows, resolveItems, generateComment, slotKey } from './record.js';
 import { readDocument, normalizeName } from './pdfimport.js';
 import { recordCard } from './form.js';
 import { parseStaff, assignWithBackup } from './assign.js';
@@ -317,11 +317,19 @@ function profileOf(userId, name = '') {
 $('#extract').addEventListener('click', () => {
   const userId = profileUser.value;
   if (!userId) { alert('先に利用者を選んでください。'); return; }
-  const found = detectProfile($('#planText').value);
+  const text = $('#planText').value;
+  const found = detectProfile(text);
   const p = profileOf(userId);
   p.careLevel = found.careLevel || p.careLevel;
   p.dementia = found.dementia || p.dementia;
   p.items = [...new Set([...p.items, ...found.items])];
+  // 頻度の書いてある行があれば、ケアプラン第2表として使う
+  const rows = detectPlanRows(text);
+  if (rows.length) {
+    const m = /作成年月日\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/.exec(text);
+    const date = m ? `${2018 + Number(m[1])}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : '';
+    p.carePlans = [...(p.carePlans ?? []).filter(c => c.date !== date), { date, rows }].sort((a, b) => a.date.localeCompare(b.date));
+  }
   save();
   render();
 });

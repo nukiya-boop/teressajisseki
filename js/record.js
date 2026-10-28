@@ -87,6 +87,14 @@ export function detectProfile(text) {
   return { careLevel: detectCareLevel(text), dementia: detectDementia(text), items: detectItems(text) };
 }
 
+// 貼り付けたケアプラン第2表などの本文から、1行ずつ援助内容と頻度を読む（頻度のない行は使わない）。
+export function detectPlanRows(text) {
+  return String(text ?? '').split(/\r?\n/)
+    .map(line => ({ line, items: detectItems(line), perWeek: perWeek(line) }))
+    .filter(r => r.items.length && r.perWeek != null && !/居宅療養|福祉用具/.test(r.line))
+    .map(r => ({ content: r.line.trim(), freq: (/週\s*に?\s*[\d０-９]+\s*回|月\s*に?\s*[\d０-９]+\s*回|毎日/.exec(r.line) ?? [''])[0], perWeek: r.perWeek, items: r.items }));
+}
+
 // 「週に2回」「毎日」などを週あたりの回数にする（読めなければ null）。
 export function perWeek(freq) {
   const t = String(freq ?? '').replace(/\s+/g, '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
