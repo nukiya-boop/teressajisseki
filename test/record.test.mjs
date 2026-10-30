@@ -145,3 +145,10 @@ test('計画書がないときは、入浴を30分未満の訪問に、起床介
   const bath = resolveItems({ profile, date: '2026-02-03', start: '09:30', service: '身体介護２', slotPerWeek: 3, slotWeekdays: [2, 4, 6] });
   assert.ok(!bath.items.includes('起床介助'));
 });
+
+test('入浴のない訪問に入浴の文を入れず、全介助の人に「顔を洗われ」を使わない', () => {
+  for (let i = 0; i < 40; i++) {
+    const c = generateComment({ profile: { careLevel: '要介護5' }, items: ['水分補給', '洗面'], seed: `s${i}`, start: '06:30', date: '2026-02-10' });
+    assert.doesNotMatch(c, /入浴|顔を洗われ/);
+  }
+});

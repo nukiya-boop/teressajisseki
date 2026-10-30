@@ -454,7 +454,10 @@ const ITEM_TEXT = {
     heavy: ['更衣時、袖通しに腕を伸ばす協力動作があった。'],
   },
   '整容': { any: ['髪を整えると「きれいになった」と鏡を見て喜ばれた。', '顔を拭き、髪を整えた。', '整髪を手伝い、身だしなみを整えた。'] },
-  '洗面': { any: ['洗面所で顔を洗われ、見守った。'] },
+  '洗面': {
+    light: ['洗面所で顔を洗われ、見守った。'],
+    heavy: ['温かいタオルで顔を拭き、洗面を介助した。', '蒸しタオルで顔を拭くと、気持ちよさそうにされていた。'],
+  },
   '口腔ケア': {
     any: ['就寝前の歯磨きを声かけし、ご自身で丁寧にされていた。', '口腔ケアを行い、口の中がすっきりした様子だった。'],
     adl: { '口腔衛生:自立': ['歯磨きはご自身で行われ、仕上がりを確認した。', 'うがいまでご自身でしっかりされていた。'] },
@@ -551,7 +554,8 @@ const CLOSING = {
 const MAX_LENGTH = 170;
 
 // 季節・時間帯と食い違う文を除く（梅雨に「いい天気」、夜に「昨夜はよく眠れた」など）
-function fits(sentence, season, time) {
+function fits(sentence, season, time, items = []) {
+  if (/入浴/.test(sentence) && !items.includes('全身浴')) return false;
   if (season === 'rainy' && /いい天気|ベランダ|天気が良く/.test(sentence)) return false;
   if (season !== 'rainy' && /雨/.test(sentence)) return false;
   if (season === 'summer' && /暖房|ひざ掛け|冷え/.test(sentence)) return false;
@@ -597,7 +601,7 @@ export function generateComment({ profile, items, seed, start = '', date = '', m
   const adl = profile?.adl ?? {};
   const used = new Set();
   const take = arr => {
-    const left = arr.filter(s => !used.has(s) && fits(s, season, time));
+    const left = arr.filter(s => !used.has(s) && fits(s, season, time, items));
     const s = left.length ? pick(left) : null;
     if (s) used.add(s);
     return s;
