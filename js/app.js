@@ -446,6 +446,7 @@ $('#office').addEventListener('change', e => { state.office = e.target.value; sa
 $('#tolerance').addEventListener('change', e => { state.tolerance = e.target.value; save(); render(); });
 $('#userFilter').addEventListener('change', draw);
 $('#statusFilter').addEventListener('change', draw);
+$('#staffFilter').addEventListener('change', draw);
 $('#actualOnly').addEventListener('change', draw);
 $('#noStaffOnly').addEventListener('change', draw);
 
@@ -542,6 +543,7 @@ function render() {
   const names = Object.fromEntries(Object.entries(state.profiles).map(([id, p]) => [id, p.name]));
   fillSelect($('#userFilter'), [...new Map(rows.map(r => [r.userId, `${r.userName}`]))], true);
   fillSelect($('#statusFilter'), Object.values(STATUS).map(s => [s, s]), true);
+  fillSelect($('#staffFilter'), [...new Set(rows.map(r => r.staff).filter(Boolean))].sort().map(n => [n, n]), true);
   fillSelect(profileUser, Object.keys(state.profiles).map(id => [id, names[id]]), false);
   drawProfile();
   drawStaff();
@@ -651,8 +653,9 @@ function fillSelect(sel, entries, withAll) {
 function visibleRows() {
   const user = $('#userFilter').value, status = $('#statusFilter').value;
   const actualOnly = $('#actualOnly')?.checked, noStaffOnly = $('#noStaffOnly')?.checked;
+  const staff = $('#staffFilter').value;
   return rows.filter(r => (!user || r.userId === user) && (!status || r.status === status) &&
-    (!actualOnly || r.actualStart) && (!noStaffOnly || !r.staff));
+    (!staff || r.staff === staff) && (!actualOnly || r.actualStart) && (!noStaffOnly || !r.staff));
 }
 
 function draw() {
