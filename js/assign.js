@@ -213,22 +213,21 @@ export function assignBest(visits, staff, opts = {}) {
   return best;
 }
 
-// 通常のヘルパーで振り分けてから、残った訪問だけに補充のヘルパーを入れる（通常の割り当ては変えない）
+// 通常のヘルパーで振り分けてから、残った訪問に補充のヘルパーを書いた順に1人ずつ入れる
+// （通常の割り当ても、先の補充の人の割り当ても変えない）
 export function assignWithBackup(visits, staff, opts = {}) {
   const main = staff.filter(p => !p.backup);
-  const backup = staff.filter(p => p.backup);
-  const first = assignBest(visits, main, opts);
-  if (!backup.length || !first.unassigned.length) return first;
-  const left = new Set(first.unassigned);
-  const second = assignStaff(visits.filter(v => left.has(v.key)), backup, { ...opts, fixed: {} });
-  const load = { ...first.load };
-  for (const [n, l] of Object.entries(second.load)) if (l.visits) load[n] = l;
-  return {
-    assign: { ...first.assign, ...second.assign },
-    unassigned: second.unassigned,
-    tight: { ...first.tight, ...second.tight },
-    shifted: { ...first.shifted, ...second.shifted },
-    trimmed: { ...first.trimmed, ...second.trimmed },
-    load,
-  };
+  const result = assignBest(visits, main, opts);
+  for (const p of staff.filter(p => p.backup)) {
+    if (!result.unassigned.length) break;
+    const left = new Set(result.unassigned);
+    const r = assignStaff(visits.filter(v => left.has(v.key)), [p], { ...opts, fixed: {} });
+    Object.assign(result.assign, r.assign);
+    Object.assign(result.tight, r.tight);
+    Object.assign(result.shifted, r.shifted);
+    Object.assign(result.trimmed, r.trimmed);
+    if (r.load[p.name]?.visits) result.load[p.name] = r.load[p.name];
+    result.unassigned = r.unassigned;
+  }
+  return result;
 }

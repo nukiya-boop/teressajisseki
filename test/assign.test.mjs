@@ -143,3 +143,20 @@ test('補充のヘルパーは、ほかのヘルパーで埋まらなかった�
   assert.equal(r.assign.c, '介護花子');
   assert.deepEqual(r.unassigned, []);
 });
+
+test('補充のヘルパーが2人いるときは、書いた順に残りを埋める', async () => {
+  const { assignWithBackup } = await import('../js/assign.js');
+  const staff = parseStaff('介護花子 2026年2月1日〜現在\n補充一郎 2026年7月1日〜現在 補充\n補充二郎 2026年7月1日〜現在 補充');
+  const visits = [
+    { key: 'a', date: '2026-07-01', start: '14:00', end: '14:30', userId: 'U1', slot: 'U1' },
+    { key: 'b', date: '2026-07-01', start: '14:05', end: '14:35', userId: 'U2', slot: 'U2' },
+    { key: 'c', date: '2026-07-01', start: '14:10', end: '14:40', userId: 'U3', slot: 'U3' },
+    { key: 'd', date: '2026-07-02', start: '14:10', end: '14:40', userId: 'U3', slot: 'U3' },
+  ];
+  const r = assignWithBackup(visits, staff, { buffer: 1 });
+  assert.equal(r.assign.a, '介護花子');
+  assert.equal(r.assign.b, '補充一郎');
+  assert.equal(r.assign.c, '補充二郎');
+  assert.equal(r.assign.d, '介護花子');
+  assert.deepEqual(r.unassigned, []);
+});
