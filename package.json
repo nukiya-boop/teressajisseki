@@ -1,1 +1,1 @@
-{"name":"teressajisseki","private":true,"type":"module","scripts":{"test":"node --test test/*.mjs","start":"npx --yes serve -l 8080 ."}}
+{"name":"teressajisseki","private":true,"type":"module","scripts":{"build":"npx --yes esbuild@0.21.5 js/app.js --bundle --format=esm --target=es2022 --charset=utf8 \"--banner:js=// npm run build で js/*.js から作るファイルです。直接編集しないでください。\n(async () => {\" \"--footer:js=})();\" --outfile=js/app.bundle.js","test":"node --test test/*.mjs","start":"npx --yes serve -l 8080 ."}}
