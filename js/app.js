@@ -56,6 +56,9 @@ async function load() {
   }
 }
 
+// ブラウザの容量が足りなくなっても、保存したデータを消さないように頼む
+navigator.storage?.persist?.().catch(() => {});
+
 async function saveNow() {
   try {
     const db = await openDb();
