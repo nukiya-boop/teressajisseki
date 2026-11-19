@@ -706,7 +706,7 @@ function draw() {
       <td>${esc(r.staff) || '—'}</td>
       <td><span class="badge ${cls(r.status)}">${r.status}</span></td>
       <td class="items">${r.items.map(n => `<span class="chip">レ ${esc(n)}</span>`).join('')}</td>
-      <td class="comment">${r.confirmed ? '<span class="badge ok">確認済</span>' : '<span class="badge warn">下書き</span>'} ${esc(r.comment)}</td>
+      <td class="comment">${r.confirmed ? '<span class="badge ok">確認済</span> ' : ''}${esc(r.comment)}</td>
     </tr>
     ${r.key === openKey ? detailRow(r) : ''}`).join('');
 }
