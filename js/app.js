@@ -398,7 +398,7 @@ function drawProfile() {
     <p class="hint">訪問介護計画書：${p.versions.length ? p.versions.map(v => `${v.date}版`).join('、') : '未取り込み'}
       ／ ケアプラン第2表：${p.carePlans.length ? p.carePlans.map(c => `${c.date}版`).join('、') : '未取り込み'}（ケアプランの頻度を優先）</p>
     <table class="slots">
-      <thead><tr><th>${esc(monthInput.value)} の訪問枠</th><th>回数</th><th>レ点（${'自動'}）</th><th>根拠</th><th></th></tr></thead>
+      <thead><tr><th>${esc(monthInput.value)} の訪問枠</th><th>回数</th><th>レ点（計画書から）</th><th>根拠</th><th></th></tr></thead>
       <tbody>${slots.map(s => `
         <tr>
           <td>${esc(s.start)}〜${esc(s.end)} ${esc(s.service)}</td>
@@ -432,7 +432,7 @@ function drawProfile() {
   if (reset) reset.onclick = () => { delete p.slotOverrides[editSlot]; clearSlotRecords(userId, editSlot); save(); render(); };
 }
 
-// 訪問枠のレ点を変えたら、その枠の自動入力をやり直す（確認済みの記録は残す）
+// 訪問枠のレ点を変えたら、その枠のレ点を入れ直す（確認済みの記録は残す）
 function clearSlotRecords(userId, key) {
   for (const r of rows.filter(r => r.userId === userId && slotKey(r.planStart || r.actualStart, r.service) === key)) {
     if (!state.records[r.key]?.confirmed) delete state.records[r.key];
@@ -524,7 +524,7 @@ function rowKey(r) {
   return `${r.date}|${r.userId}|${r.planStart || r.actualStart}|${r.service}`;
 }
 
-// 予定・実績の各行に、レ点と記録コメントを自動で入れる（手で直した内容はそちらを優先）。
+// 予定・実績の各行に、レ点と記録コメントを入れる（手で直した内容はそちらを優先）。
 function withRecord(r, slotCounts, slotDays, weeks) {
   const key = rowKey(r);
   const start = r.planStart || r.actualStart;
@@ -600,7 +600,7 @@ function alignTimes(list) {
   }
 }
 
-// シフト・実績・手入力で担当者が決まっていない訪問に、ヘルパーを自動で割り当てる
+// シフト・実績・手入力で担当者が決まっていない訪問に、ヘルパーを割り当てる
 let staffLoad = null;
 function assignHelpers(list) {
   const staff = parseStaff(state.staffText);
@@ -719,7 +719,7 @@ function detailRow(r) {
     <div class="row">
       <button data-d="regen" class="secondary">コメント再生成</button>
       <button data-d="reset" class="secondary">レ点を計画書どおりに戻す</button>
-      <label>担当ヘルパー <input data-d="staff" value="${esc(r.staff)}" list="staffNames" size="14">${r.staffAuto ? '<span class="hint">（自動）</span>' : ''}</label>
+      <label>担当ヘルパー <input data-d="staff" value="${esc(r.staff)}" list="staffNames" size="14">${r.staffAuto ? '<span class="hint">（振り分け）</span>' : ''}</label>
       <datalist id="staffNames">${parseStaff(state.staffText).map(p => `<option value="${esc(p.name)}">`).join('')}</datalist>
       <label><input type="checkbox" data-d="confirmed" ${r.confirmed ? 'checked' : ''}> 記録内容を確認した</label>
     </div>
