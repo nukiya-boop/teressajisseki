@@ -2125,7 +2125,7 @@ function assignHelpers(list) {
       const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
       r.recStart = fmt(toMin(r.recStart || r.actualStart || r.planStart) - o);
       r.recEnd = fmt(toMin(r.recEnd || r.actualEnd || r.planEnd) - o);
-      notes.push(`予定より${o}分前倒しして割り当て`);
+      notes.push(`予定より${o}分前倒し`);
     }
     const t = result.trimmed[r.key];
     if (t) {
@@ -2149,7 +2149,7 @@ function drawStaff() {
   const { load: load2, unassigned, staff } = staffLoad;
   const tight = Object.keys(staffLoad.tight).length, shifted = Object.keys(staffLoad.shifted).length;
   const target = rows.filter((r) => r.staffNote !== "実績なし").length;
-  $("#staffStatus").textContent = `${monthInput.value}：${target - unassigned.length}件を割り当て（うち移動時間を詰めたもの${tight}件${shifted ? `、前倒ししたもの${shifted}件` : ""}${Object.keys(staffLoad.trimmed).length ? `、終了を早めたもの${Object.keys(staffLoad.trimmed).length}件` : ""}）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
+  $("#staffStatus").textContent = `${monthInput.value}：${target - unassigned.length}件に担当者を入れました（うち移動時間を詰めたもの${tight}件${shifted ? `、前倒ししたもの${shifted}件` : ""}${Object.keys(staffLoad.trimmed).length ? `、終了を早めたもの${Object.keys(staffLoad.trimmed).length}件` : ""}）、${unassigned.length}件は空いているヘルパーがいないため空欄`;
   const [y, m] = monthInput.value.split("-").map(Number);
   const first = `${monthInput.value}-01`, last = `${monthInput.value}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
   const shown = staff.filter((p) => p.from <= last && (!p.to || p.to >= first));
