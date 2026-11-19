@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>実績管理アプリ 説明書</title>
+<style>
+  @page { size: A4 portrait; margin: 14mm 14mm; }
+  body { font-family: "Meiryo", "Yu Gothic", "Hiragino Sans", "Noto Sans JP", "IPAPGothic", sans-serif; color: #111; background: #fff; font-size: 10.5pt; line-height: 1.6; max-width: 182mm; margin: 0 auto; padding: 0 4mm; }
+  h1 { font-size: 17pt; margin: 0 0 2mm; border-bottom: 3px solid #2b4c9b; padding-bottom: 1mm; }
+  h2 { font-size: 12.5pt; margin: 6mm 0 2mm; background: #e6ecf8; color: #1d3570; padding: 1mm 3mm; border-left: 5px solid #2b4c9b; }
+  h3 { font-size: 11pt; margin: 4mm 0 1mm; }
+  ol, ul { margin: 1mm 0 1mm; padding-left: 7mm; }
+  li { margin: 0.6mm 0; }
+  .lead { color: #444; margin: 0 0 2mm; }
+  .box { border: 1.5px solid #c0392b; background: #fdf0ee; border-radius: 2mm; padding: 2mm 4mm; margin: 3mm 0; }
+  .box b { color: #a12828; }
+  .tip { border: 1px solid #9bb0dd; background: #f4f7fd; border-radius: 2mm; padding: 2mm 4mm; margin: 3mm 0; }
+  .btn { display: inline-block; border: 1px solid #2b4c9b; border-radius: 1.5mm; padding: 0 2mm; background: #fff; color: #1d3570; font-size: 9.5pt; white-space: nowrap; }
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0; }
+  th, td { border: 1px solid #9aa; padding: 1mm 2mm; text-align: left; vertical-align: top; }
+  th { background: #f0f2f5; white-space: nowrap; }
+  .page { break-before: page; }
+  .flow { display: flex; gap: 2mm; align-items: stretch; margin: 2mm 0; }
+  .flow div { flex: 1; border: 1px solid #2b4c9b; border-radius: 2mm; padding: 2mm; font-size: 9.5pt; text-align: center; }
+  .flow span { align-self: center; color: #2b4c9b; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<h1>実績管理アプリ 説明書</h1>
+<p class="lead">サービス実施記録・出勤簿・勤務体制一覧表を、毎月かんたんに出すためのアプリです。</p>
+
+<h2>1. アプリを開く</h2>
+<ol>
+  <li>もらった <b>実績管理アプリ_v○.zip</b> を右クリック →「すべて展開」</li>
+  <li>できた <b>jisseki-app</b> フォルダの中の <b>index.html</b> をダブルクリック（Chrome か Edge で開きます）</li>
+  <li>初めて使うパソコンでは、<span class="btn">データを読み込む</span> を押して、もらった <b>実績管理データ_○○.json</b> を選ぶ →「置き換えますか」で <b>OK</b></li>
+</ol>
+<div class="tip">一度読み込めば、ブラウザを閉じてもデータは残ります。次からは index.html を開くだけです。<br>
+PDF の書類を取り込むときは、インターネットにつながっている必要があります。</div>
+
+<h2>2. 毎月の書類を出す</h2>
+<ol>
+  <li>画面いちばん上の「<b>毎月の書類</b>」で、<span class="btn">◀ 前の月</span> <span class="btn">次の月 ▶</span> を押して月を選ぶ</li>
+  <li>出したい書類のボタンを押す</li>
+  <li>印刷画面が開くので、そのまま印刷するか、プリンターを「<b>PDFに保存</b>」にして保存</li>
+</ol>
+<table>
+  <tr><th>ボタン</th><th>出るもの</th></tr>
+  <tr><td><span class="btn">サービス実施記録（全員）</span></td><td>その月の全員分（利用者順・日付順、A4に2件ずつ）</td></tr>
+  <tr><td><span class="btn">出勤簿</span></td><td>ヘルパー1人1ページ。左の選択欄で「すべて」か1人を選ぶ</td></tr>
+  <tr><td><span class="btn">勤務体制一覧表</span></td><td>A4横。日ごとのサービス提供時間</td></tr>
+  <tr><td><span class="btn">勤務体制一覧表（CSV）</span> <span class="btn">実績（CSV）</span></td><td>Excel で開けるファイルを保存</td></tr>
+</table>
+
+<h3>新しい月の書類を取り込むとき</h3>
+<ol>
+  <li>「① 書類を取り込む」に、提供票・実績の PDF（ZIP のままでも可）をドロップ</li>
+  <li>「③ ヘルパー」に新しく入った人がいれば、1行で書いて <span class="btn">反映</span><br>
+    例：<code>山田太郎 2026年11月1日〜現在 常勤</code>（辞めた人は「〜11月30日」のように終わりの日を書く）<br>
+    後ろに「管理者」「サ責」「常勤」「非常勤」「兼務」と書くと、勤務体制一覧表に入ります。</li>
+  <li>「④ 実績・サービス実施記録」で内容を確認し、違うところは行をクリックして直す</li>
+</ol>
+<div class="tip">記録のコメントは書類から作った文です。実際の様子と違うところは、必ず直してから使ってください。</div>
+
+<h2 class="page">3. ほかの人と共有する</h2>
+
+<h3>A. 書類だけ渡す（いちばん簡単）</h3>
+<p>「毎月の書類」で「PDFに保存」したファイルを、社内の共有フォルダなどで渡します。相手はアプリがなくても見られます。</p>
+
+<h3>B. アプリとデータを渡す</h3>
+<div class="flow">
+  <div><b>渡す人</b><br><span class="btn">データを保存（ファイル）</span> を押す<br>→ json ファイルができる</div>
+  <span>→</span>
+  <div><b>渡すもの</b><br>・アプリの zip<br>・その json ファイル</div>
+  <span>→</span>
+  <div><b>受け取る人</b><br>「1. アプリを開く」のとおりに開いて、json を読み込む</div>
+</div>
+
+<div class="box">
+  <b>守ってほしいこと</b>
+  <ul>
+    <li><b>データを直す人は1人に決める。</b>データはそれぞれのパソコンの中に保存され、自動ではそろいません。2人が別々に直すと、どちらかの変更が消えます。</li>
+    <li>直したら、その人が <span class="btn">データを保存（ファイル）</span> で新しい json を作って配り直す。ファイル名に日付が入るので、<b>いちばん新しい日付のものを使う</b>。</li>
+    <li>json を読み込むと、そのパソコンのデータは<b>置き換わります</b>（前の内容は消えます）。</li>
+  </ul>
+</div>
+
+<div class="box">
+  <b>個人情報の注意</b>
+  <ul>
+    <li>json ファイルと書類の PDF には、利用者の名前・被保険者番号、ヘルパーの名前が入っています。</li>
+    <li>メールに添付するときはパスワードを付け、共有は社内の共有フォルダなど、決まった人だけが開ける場所でしてください。</li>
+    <li>だれでも開けるリンクや、公開のホームページには置かないでください。</li>
+  </ul>
+</div>
+
+<h3>こまったとき</h3>
+<table>
+  <tr><th>こんなとき</th><th>こうする</th></tr>
+  <tr><td>ボタンを押しても何も起きない</td><td>zip を「すべて展開」してから index.html を開いているか確認。zip の中のまま開くと動きません。</td></tr>
+  <tr><td>データが消えた・別のパソコンで使いたい</td><td>最新の json を <span class="btn">データを読み込む</span> で読み込む。</td></tr>
+  <tr><td>担当ヘルパーが空欄の訪問がある</td><td>④ で「担当者が空欄の訪問だけ」にチェックして確認。③ にヘルパーを足すか、行をクリックして担当者を入れる。</td></tr>
+</table>
+
+</body>
+</html>
