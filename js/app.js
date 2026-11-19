@@ -56,19 +56,50 @@ async function load() {
   }
 }
 
+async function saveNow() {
+  try {
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(JSON.parse(JSON.stringify(state)), 'state');
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    localStorage.removeItem(STORE_KEY);
+  } catch {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* 保存できなくても表示は続ける */ }
+  }
+}
+
 let saveTimer = null;
 function save() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    try {
-      const db = await openDb();
-      db.transaction('kv', 'readwrite').objectStore('kv').put(JSON.parse(JSON.stringify(state)), 'state');
-      localStorage.removeItem(STORE_KEY);
-    } catch {
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* 保存できなくても表示は続ける */ }
-    }
-  }, 300);
+  saveTimer = setTimeout(saveNow, 300);
 }
+
+// ---- データの保存・読み込み（ファイル） ----
+
+$('#exportData').addEventListener('click', () => {
+  const stamp = new Date().toISOString().slice(0, 10);
+  download(`実績管理データ_${stamp}.json`, JSON.stringify({ app: 'teressajisseki', version: 1, state }), 'application/json');
+});
+
+$('#importData').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (data.app !== 'teressajisseki' || !data.state) throw new Error('このアプリのデータではありません。');
+    if (!confirm('今のデータを、このファイルの内容に置き換えます。よろしいですか？')) return;
+    for (const k of Object.keys(state)) delete state[k];
+    Object.assign(state, data.state);
+    await saveNow();
+    location.reload();
+  } catch (err) {
+    alert(`読み込めませんでした（${err.message}）`);
+  }
+});
 
 // ---- CSV 取り込み ----
 

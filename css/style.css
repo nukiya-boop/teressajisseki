@@ -178,3 +178,6 @@ body.printing #printArea, .preview #printArea { display: block; }
 @media print {
   .rec { border: 0; margin: 0 auto 4mm; }
 }
+
+.secondary-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.secondary-btn input { max-width: 180px; }
