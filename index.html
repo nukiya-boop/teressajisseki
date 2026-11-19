@@ -16,6 +16,26 @@
   </header>
 
   <main>
+    <section class="monthly">
+      <h2>毎月の書類</h2>
+      <div class="row wrap">
+        <button id="prevMonth" class="secondary">◀ 前の月</button>
+        <strong id="monthLabel"></strong>
+        <button id="nextMonth" class="secondary">次の月 ▶</button>
+        <label>会社名 <input id="company" size="22" placeholder="株式会社〇〇"></label>
+        <label>事業所名（所属） <input id="orgName" size="14" placeholder="〇〇介護"></label>
+      </div>
+      <div class="row wrap">
+        <button id="printAllRecords">サービス実施記録（全員）</button>
+        <label>出勤簿 <select id="kbStaff"><option value="">全員</option></select></label>
+        <button id="printKinmubo">出勤簿</button>
+        <button id="printIchiran">勤務体制一覧表</button>
+        <button id="csvIchiran" class="secondary">勤務体制一覧表（CSV）</button>
+        <button id="csvAll" class="secondary">実績（CSV）</button>
+      </div>
+      <p class="hint">ボタンを押すと印刷画面が開きます。PDFにするときは、印刷先で「PDFに保存」を選んでください。月は ◀ ▶ で切り替えられます。</p>
+    </section>
+
     <section class="docs drop-docs">
       <h2>① 書類を取り込む</h2>
       <p class="hint">サービス提供票・利用票（実績入りのものも）、ケアプラン（第1〜3表）、訪問介護計画書、アセスメントシートの PDF をまとめてドロップしてください。ZIP のままでも読めます。予定・介護度・援助内容（レ点）を読み取ります。</p>
@@ -74,7 +94,7 @@
 
     <section class="staff">
       <h2>③ ヘルパー（振り分け）</h2>
-      <p class="hint">1行に「氏名 在籍期間」を書いてください（例：山田太郎 2026年2月1日〜現在、山田花子 2026年2月1日〜6月30日）。後ろに「補充」と書いた人は、ほかのヘルパーで埋まらなかった訪問だけに入ります。シフトや手入力で担当者が決まっていない訪問には、在籍期間内のヘルパーを担当者として入れます。同じ人が同じ時間に2か所に入ることはありません。</p>
+      <p class="hint">1行に「氏名 在籍期間」を書いてください（例：山田太郎 2026年2月1日〜現在、山田花子 2026年2月1日〜6月30日）。後ろに「補充」と書いた人は、ほかのヘルパーで埋まらなかった訪問だけに入ります。シフトや手入力で担当者が決まっていない訪問には、在籍期間内のヘルパーを担当者として入れます。同じ人が同じ時間に2か所に入ることはありません。名前と期間の後ろに「管理者」「サ責」「常勤」「非常勤」「兼務」と書くと、勤務体制一覧表の職種・勤務形態・兼務の欄に入ります（例：山田太郎 2026年2月1日〜現在 管理者 サ責 常勤）。</p>
       <textarea id="staffText" rows="6" placeholder="山田太郎 2026年2月1日〜現在"></textarea>
       <div class="row wrap">
         <label>移動時間 <input type="number" id="buffer" min="0" max="60" value="1"> 分</label>

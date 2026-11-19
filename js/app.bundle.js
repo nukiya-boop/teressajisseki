@@ -1438,6 +1438,122 @@ function assignWithBackup(visits, staff, opts = {}) {
   return result;
 }
 
+// js/monthly.js
+var WD2 = ["日", "月", "火", "水", "木", "金", "土"];
+function toMin(t) {
+  const m = /(\d{1,2}):(\d{2})/.exec(String(t ?? ""));
+  return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
+}
+var hm = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+var esc2 = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function monthDays(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  const n = new Date(y, m, 0).getDate();
+  return Array.from({ length: n }, (_, i) => {
+    const date = `${ym}-${String(i + 1).padStart(2, "0")}`;
+    return { day: i + 1, date, wd: WD2[new Date(y, m - 1, i + 1).getDay()] };
+  });
+}
+function staffRole(p) {
+  const note = p.note ?? "";
+  const mgr = /管理者/.test(note), sv = /サ責|サービス提供責任者/.test(note);
+  const job = mgr && sv ? "管理者兼サ責" : mgr ? "管理者" : sv ? "サービス提供責任者" : "ヘルパー";
+  const form = /非常勤/.test(note) ? "非常勤" : /常勤/.test(note) ? "常勤" : "";
+  return { job, form, kenmu: /兼務/.test(note) ? "○" : "" };
+}
+function helperVisits(rows2) {
+  const out = {};
+  for (const r of rows2) {
+    if (!r.staff) continue;
+    const s = toMin(r.recStart || r.actualStart || r.planStart);
+    let e = toMin(r.recEnd || r.actualEnd || r.planEnd);
+    if (!(s >= 0)) continue;
+    if (!(e > s)) e = s + 20;
+    ((out[r.staff] ??= {})[r.date] ??= []).push([s, e]);
+  }
+  return out;
+}
+var inMonth = (p, ym, days) => p.from <= days[days.length - 1].date && (!p.to || p.to >= `${ym}-01`);
+function kinmuboHtml({ ym, staff, visits, company = "", office = "" }) {
+  const days = monthDays(ym);
+  const [y, m] = ym.split("-").map(Number);
+  return staff.filter((p) => inMonth(p, ym, days)).map((p) => {
+    let workDays = 0, total = 0;
+    const body = days.map(({ day, date, wd }) => {
+      const v = visits[p.name]?.[date] ?? [];
+      let cells;
+      if (date < p.from || p.to && date > p.to) {
+        cells = ["", "", "", "", "", "", "", "", "", date < p.from ? "入職前" : "退職後"];
+      } else if (!v.length) {
+        cells = ["法定休日", "0:00", "0:00", "0:00", "0:00", "0", "0", "0", "無", ""];
+      } else {
+        const st = Math.min(...v.map((x) => x[0])), en = Math.max(...v.map((x) => x[1]));
+        const w = v.reduce((a, x) => a + x[1] - x[0], 0);
+        workDays++;
+        total += w;
+        cells = ["出勤", hm(st), hm(en), hm(Math.max(0, en - st - w)), hm(w), "0", "0", "0", "無", ""];
+      }
+      return `<tr class="${day > 1 && wd === "月" ? "wk" : ""}"><td>${day}日</td><td>(${wd})</td>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
+    }).join("");
+    return `<section class="kb">
+  <h1>${esc2(company)} 出勤簿</h1>
+  <div class="kb-head"><div class="kb-ym">${y}年${m}月</div><div class="kb-who"><div>所属：${esc2(office)}</div><div>氏名：${esc2(p.name)}</div></div></div>
+  <table class="kb-main">
+    <colgroup><col style="width:7%"><col style="width:6%"><col style="width:10%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:10%"></colgroup>
+    <tr><th rowspan="2">日付</th><th rowspan="2">曜日</th><th rowspan="2">区分</th><th rowspan="2">始業<br>時間</th><th rowspan="2">終業<br>時間</th><th rowspan="2">休憩<br>時間</th><th rowspan="2">実働<br>時間</th><th colspan="3">残業時間</th><th rowspan="2">遅刻・早退</th><th rowspan="2">備考</th></tr>
+    <tr><th>時間外残業</th><th>深夜残業</th><th>早朝残業</th></tr>
+    ${body}
+  </table>
+  <div class="kb-foot">
+    <table><tr><td>勤務日数</td><td class="r">${workDays}日</td></tr><tr><td>早退・遅刻回数</td><td class="r">0回</td></tr><tr><td>欠勤日数</td><td class="r">0回</td></tr><tr class="sum1"><td>合計勤務時間</td><td class="r">${hm(total)}</td></tr></table>
+    <table><tr><td>時間外残業時間</td><td class="r">0:00</td></tr><tr><td>深夜残業時間</td><td class="r">0:00</td></tr><tr><td>早朝残業時間</td><td class="r">0:00</td></tr><tr class="sum2"><td>合計残業時間</td><td class="r">0:00</td></tr></table>
+    <table class="sign"><tr><td style="text-align:center">本人署名欄</td></tr><tr><td class="box"></td></tr></table>
+  </div>
+</section>`;
+  }).join("");
+}
+function ichiranRows({ ym, staff, visits }) {
+  const days = monthDays(ym);
+  const rank = (j) => j === "ヘルパー" ? 1 : 0;
+  return staff.filter((p) => inMonth(p, ym, days)).map((p, i) => ({ p, i, ...staffRole(p) })).sort((a, b) => rank(a.job) - rank(b.job) || a.i - b.i).map(({ p, job, form, kenmu }) => {
+    const hours = days.map(({ date }) => {
+      const v = visits[p.name]?.[date] ?? [];
+      const min = v.reduce((a, x) => a + x[1] - x[0], 0);
+      return min ? Math.round(min / 6) / 10 : null;
+    });
+    return { name: p.name, job, form, kenmu, hours, total: Math.round(hours.reduce((a, h) => a + (h ?? 0), 0) * 10) / 10 };
+  });
+}
+function ichiranHtml({ ym, staff, visits, office = "", service = "訪問介護：介護予防型訪問サービス、生活援助型訪問サービス" }) {
+  const days = monthDays(ym);
+  const list = ichiranRows({ ym, staff, visits });
+  const m = Number(ym.slice(5));
+  const pad2 = Array.from({ length: Math.max(0, 20 - list.length) }, () => ({ name: "", job: "", form: "", kenmu: "", hours: days.map(() => null), total: null }));
+  const f = (h) => h == null ? "" : h.toFixed(1);
+  const dayTotals = days.map((_, i) => list.reduce((a, r) => a + (r.hours[i] ?? 0), 0));
+  const all = dayTotals.reduce((a, b) => a + b, 0);
+  const fill = (n) => Array.from({ length: 31 - n }, () => "<td></td>").join("");
+  return `<section class="kt">
+  <h1>従 業 者 の 勤 務 体 制 及 び サ ー ビ ス 提 供 時 間 一 覧 表 <span>（ ${m}月分 ）</span></h1>
+  <table class="kt-head"><tr><th>事業所の名称</th><td>${esc2(office)}</td><th>サービスの種類</th><td>${esc2(service)}</td></tr></table>
+  <table class="kt-main">
+    <tr><th rowspan="2" class="job">職種</th><th rowspan="2" class="form">勤務<br>形態</th><th rowspan="2" class="ken">兼務の<br>状況</th><th rowspan="2" class="name">氏　名</th><th>日</th>${days.map((d) => `<th>${d.day}</th>`).join("")}${fill(days.length).replace(/td/g, "th")}<th rowspan="2" class="sum">合計</th></tr>
+    <tr><th>曜</th>${days.map((d) => `<th>${d.wd}</th>`).join("")}${fill(days.length).replace(/td/g, "th")}</tr>
+    ${[...list, ...pad2].map((r, i) => `<tr><td>${esc2(r.job)}</td><td>${esc2(r.form)}</td><td>${r.kenmu}</td><td class="name">${esc2(r.name)}</td>${i === 0 ? `<td rowspan="${list.length + pad2.length}" class="vnote">↑ サービス提供時間（事業所における待機時間や移動時間を除く）を記載してください。</td>` : ""}${r.hours.map((h) => `<td>${f(h)}</td>`).join("")}${fill(days.length)}<td class="sum">${f(r.total)}</td></tr>`).join("")}
+    <tr class="tot"><td colspan="5">合計</td>${dayTotals.map((t) => `<td>${t ? t.toFixed(1) : ""}</td>`).join("")}${fill(days.length)}<td class="sum">${all.toFixed(1)}</td></tr>
+  </table>
+  <p class="kt-note">※「職種」「勤務形態」「兼務の状況」は、③ヘルパーの各行の後ろに「管理者」「サ責」「常勤」「非常勤」「兼務」と書くと入ります。</p>
+</section>`;
+}
+function ichiranCsv({ ym, staff, visits }) {
+  const days = monthDays(ym);
+  const list = ichiranRows({ ym, staff, visits });
+  return [
+    ["職種", "勤務形態", "兼務の状況", "氏名", ...days.map((d) => `${d.day}(${d.wd})`), "合計"],
+    ...list.map((r) => [r.job, r.form, r.kenmu, r.name, ...r.hours.map((h) => h == null ? "" : h.toFixed(1)), r.total.toFixed(1)])
+  ];
+}
+
 // js/app.js
 var STORE_KEY = "teressajisseki:v1";
 var PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
@@ -1459,6 +1575,8 @@ $("#minBuffer").value = state.minBuffer ?? state.buffer ?? 1;
 $("#shiftMax").value = state.shiftMax ?? 0;
 $("#trimEnd").value = state.trimEnd ?? 1;
 $("#maxSpan").value = state.maxSpan ?? "";
+$("#company").value = state.company ?? "";
+$("#orgName").value = state.orgName ?? "";
 function openDb() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(STORE_KEY, 1);
@@ -1647,7 +1765,7 @@ async function importDocs(files) {
 function logLine(file, message, error = false) {
   const li = document.createElement("li");
   li.className = error ? "error" : "";
-  li.innerHTML = `<b>${esc2(file)}</b> ${esc2(message)}`;
+  li.innerHTML = `<b>${esc3(file)}</b> ${esc3(message)}`;
   $("#docLog").append(li);
 }
 function applyDoc(doc) {
@@ -1828,24 +1946,24 @@ function drawProfile() {
   const slots = slotsOf(userId);
   box.innerHTML = `
     <div class="row wrap">
-      <span>被保険者番号 ${esc2(userId.startsWith("name:") ? "（未取得）" : userId)}</span>
+      <span>被保険者番号 ${esc3(userId.startsWith("name:") ? "（未取得）" : userId)}</span>
       <label>介護度 <select data-f="careLevel"><option value="">未設定</option>
         ${CARE_LEVELS.map((l) => `<option ${l === p.careLevel ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label><input type="checkbox" data-f="dementia" ${p.dementia ? "checked" : ""}> 認知症の記録文を入れる</label>
-      ${p.dementiaLevel ? `<span class="hint">認知症自立度 ${esc2(p.dementiaLevel)}（アセスメントより）</span>` : ""}
+      ${p.dementiaLevel ? `<span class="hint">認知症自立度 ${esc3(p.dementiaLevel)}（アセスメントより）</span>` : ""}
       <label><input type="checkbox" data-f="walker" ${p.walker ? "checked" : ""}> 歩行器使用</label>
     </div>
     <p class="hint">訪問介護計画書：${p.versions.length ? p.versions.map((v) => `${v.date}版`).join("、") : "未取り込み"}
       ／ ケアプラン第2表：${p.carePlans.length ? p.carePlans.map((c) => `${c.date}版`).join("、") : "未取り込み"}（ケアプランの頻度を優先）</p>
     <table class="slots">
-      <thead><tr><th>${esc2(monthInput.value)} の訪問枠</th><th>回数</th><th>レ点（計画書から）</th><th>根拠</th><th></th></tr></thead>
+      <thead><tr><th>${esc3(monthInput.value)} の訪問枠</th><th>回数</th><th>レ点（計画書から）</th><th>根拠</th><th></th></tr></thead>
       <tbody>${slots.map((s) => `
         <tr>
-          <td>${esc2(s.start)}〜${esc2(s.end)} ${esc2(s.service)}</td>
+          <td>${esc3(s.start)}〜${esc3(s.end)} ${esc3(s.service)}</td>
           <td>${s.count}回</td>
-          <td class="items">${s.items.map((n) => `<span class="chip">レ ${esc2(n)}${s.tally[n] < s.count ? ` <small>${s.tally[n]}/${s.count}回</small>` : ""}</span>`).join("")}</td>
-          <td class="hint">${esc2(s.source)}</td>
-          <td><button class="secondary" data-slot="${esc2(s.key)}">${editSlot === s.key ? "閉じる" : "編集"}</button></td>
+          <td class="items">${s.items.map((n) => `<span class="chip">レ ${esc3(n)}${s.tally[n] < s.count ? ` <small>${s.tally[n]}/${s.count}回</small>` : ""}</span>`).join("")}</td>
+          <td class="hint">${esc3(s.source)}</td>
+          <td><button class="secondary" data-slot="${esc3(s.key)}">${editSlot === s.key ? "閉じる" : "編集"}</button></td>
         </tr>
         ${editSlot === s.key ? `<tr class="detail"><td colspan="5">
           <p class="hint">この訪問枠のすべての日に使うレ点を選びます。</p>
@@ -1992,8 +2110,10 @@ function download(name, text, type) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type }));
   a.download = name;
+  document.body.append(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1e4);
 }
 $("#printRecords").addEventListener("click", () => {
   const list = visibleRows();
@@ -2005,7 +2125,73 @@ $("#printRecords").addEventListener("click", () => {
   document.body.classList.add("printing");
   window.print();
 });
-window.addEventListener("afterprint", () => document.body.classList.remove("printing"));
+window.addEventListener("afterprint", () => document.body.classList.remove("printing", "wide"));
+function shiftMonth(n) {
+  const [y, m] = monthInput.value.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  monthInput.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  monthInput.dispatchEvent(new Event("change"));
+}
+$("#prevMonth").addEventListener("click", () => shiftMonth(-1));
+$("#nextMonth").addEventListener("click", () => shiftMonth(1));
+$("#company").addEventListener("change", (e) => {
+  state.company = e.target.value;
+  save();
+});
+$("#orgName").addEventListener("change", (e) => {
+  state.orgName = e.target.value;
+  save();
+});
+function printHtml(html, wide = false) {
+  $("#printArea").innerHTML = html;
+  document.body.classList.add("printing");
+  document.body.classList.toggle("wide", wide);
+  window.print();
+}
+var monthRows = () => rows.filter((r) => r.staffNote !== "実績なし");
+var docArgs = () => ({ ym: monthInput.value, staff: parseStaff(state.staffText), visits: helperVisits(monthRows()), company: state.company ?? "", office: state.orgName ?? "" });
+var ymLabel = () => {
+  const [y, m] = monthInput.value.split("-").map(Number);
+  return `R${y - 2018}.${String(m).padStart(2, "0")}`;
+};
+$("#printAllRecords").addEventListener("click", () => {
+  const list = [...monthRows()].sort((a, b) => (a.userName || "").localeCompare(b.userName || "", "ja") || a.date.localeCompare(b.date) || (a.recStart || a.actualStart || a.planStart || "").localeCompare(b.recStart || b.actualStart || b.planStart || ""));
+  if (!list.length) {
+    alert("この月の記録がありません。");
+    return;
+  }
+  printHtml(list.map((r) => recordCard(r, { office: state.office })).join(""));
+});
+$("#printKinmubo").addEventListener("click", () => {
+  const args = docArgs();
+  const who = $("#kbStaff").value;
+  if (who) args.staff = args.staff.filter((p) => p.name === who);
+  const html = kinmuboHtml(args);
+  if (!html) {
+    alert("③ にヘルパーを入れてください。");
+    return;
+  }
+  printHtml(html);
+});
+$("#printIchiran").addEventListener("click", () => {
+  const html = ichiranHtml(docArgs());
+  if (!html.includes('class="name">')) {
+    alert("③ にヘルパーを入れてください。");
+    return;
+  }
+  printHtml(html, true);
+});
+$("#csvIchiran").addEventListener("click", () => {
+  download(`勤務体制一覧表_${ymLabel()}.csv`, "\uFEFF" + toCSV(ichiranCsv(docArgs())), "text/csv");
+});
+$("#csvAll").addEventListener("click", () => {
+  const keep = [$("#userFilter").value, $("#statusFilter").value, $("#staffFilter").value, $("#actualOnly").checked, $("#noStaffOnly").checked];
+  $("#userFilter").value = $("#statusFilter").value = $("#staffFilter").value = "";
+  $("#actualOnly").checked = rows.some((r) => r.actualStart);
+  $("#noStaffOnly").checked = false;
+  $("#export").click();
+  [$("#userFilter").value, $("#statusFilter").value, $("#staffFilter").value, $("#actualOnly").checked, $("#noStaffOnly").checked] = keep;
+});
 function rowKey(r) {
   return `${r.date}|${r.userId}|${r.planStart || r.actualStart}|${r.service}`;
 }
@@ -2064,9 +2250,12 @@ function render() {
   fillSelect(profileUser, Object.keys(state.profiles).map((id) => [id, names[id]]), false);
   drawProfile();
   drawStaff();
+  const [yy, mm] = monthInput.value.split("-").map(Number);
+  $("#monthLabel").textContent = `${yy}年${mm}月（R${yy - 2018}.${mm}）`;
+  fillSelect($("#kbStaff"), docArgs().staff.filter((p) => p.from <= `${monthInput.value}-31` && (!p.to || p.to >= `${monthInput.value}-01`)).map((p) => [p.name, p.name]), true);
   draw();
 }
-function toMin(t) {
+function toMin2(t) {
   const m = /(\d{1,2}):(\d{2})/.exec(String(t));
   return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
 }
@@ -2123,13 +2312,13 @@ function assignHelpers(list) {
     const o = result.shifted[r.key];
     if (o) {
       const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-      r.recStart = fmt(toMin(r.recStart || r.actualStart || r.planStart) - o);
-      r.recEnd = fmt(toMin(r.recEnd || r.actualEnd || r.planEnd) - o);
+      r.recStart = fmt(toMin2(r.recStart || r.actualStart || r.planStart) - o);
+      r.recEnd = fmt(toMin2(r.recEnd || r.actualEnd || r.planEnd) - o);
       notes.push(`予定より${o}分前倒し`);
     }
     const t = result.trimmed[r.key];
     if (t) {
-      const m = toMin(r.recEnd || r.actualEnd || r.planEnd) - t;
+      const m = toMin2(r.recEnd || r.actualEnd || r.planEnd) - t;
       r.recStart ??= r.actualStart || r.planStart;
       r.recEnd = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
       notes.push(`次の訪問に間に合うよう終了を${t}分早めた`);
@@ -2154,7 +2343,7 @@ function drawStaff() {
   const first = `${monthInput.value}-01`, last = `${monthInput.value}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
   const shown = staff.filter((p) => p.from <= last && (!p.to || p.to >= first));
   box.innerHTML = `<table class="slots"><thead><tr><th>ヘルパー</th><th>在籍</th><th>担当件数</th><th>時間</th></tr></thead><tbody>
-    ${shown.map((p) => `<tr><td>${esc2(p.name)}</td><td class="hint">${p.from}〜${p.to || "現在"}</td>
+    ${shown.map((p) => `<tr><td>${esc3(p.name)}</td><td class="hint">${p.from}〜${p.to || "現在"}</td>
       <td>${load2[p.name]?.visits ?? 0}件</td><td>${((load2[p.name]?.minutes ?? 0) / 60).toFixed(1)}時間</td></tr>`).join("")}
   </tbody></table>`;
 }
@@ -2186,30 +2375,30 @@ function draw() {
   const list = visibleRows();
   $("#empty").hidden = rows.length > 0;
   $("#rows").innerHTML = list.map((r) => `
-    <tr class="${cls(r.status)} clickable" data-key="${esc2(r.key)}">
+    <tr class="${cls(r.status)} clickable" data-key="${esc3(r.key)}">
       <td class="mark">${r.teressa ? "○" : ""}</td>
-      <td>${esc2(r.date)}（${WEEKDAYS2[(/* @__PURE__ */ new Date(`${r.date}T00:00:00`)).getDay()]}）</td>
-      <td>${esc2(r.userName)}</td>
-      <td>${esc2(r.service)}</td>
-      <td>${r.planStart ? `${esc2(r.planStart)}〜${esc2(r.planEnd)}` : "—"}</td>
-      <td>${r.actualStart ? `${esc2(r.actualStart)}〜${esc2(r.actualEnd)}` : "—"}</td>
-      <td>${esc2(r.staff) || "—"}</td>
+      <td>${esc3(r.date)}（${WEEKDAYS2[(/* @__PURE__ */ new Date(`${r.date}T00:00:00`)).getDay()]}）</td>
+      <td>${esc3(r.userName)}</td>
+      <td>${esc3(r.service)}</td>
+      <td>${r.planStart ? `${esc3(r.planStart)}〜${esc3(r.planEnd)}` : "—"}</td>
+      <td>${r.actualStart ? `${esc3(r.actualStart)}〜${esc3(r.actualEnd)}` : "—"}</td>
+      <td>${esc3(r.staff) || "—"}</td>
       <td><span class="badge ${cls(r.status)}">${r.status}</span></td>
-      <td class="items">${r.items.map((n) => `<span class="chip">レ ${esc2(n)}</span>`).join("")}</td>
-      <td class="comment">${r.confirmed ? '<span class="badge ok">確認済</span> ' : ""}${esc2(r.comment)}</td>
+      <td class="items">${r.items.map((n) => `<span class="chip">レ ${esc3(n)}</span>`).join("")}</td>
+      <td class="comment">${r.confirmed ? '<span class="badge ok">確認済</span> ' : ""}${esc3(r.comment)}</td>
     </tr>
     ${r.key === openKey ? detailRow(r) : ""}`).join("");
 }
 function detailRow(r) {
   return `<tr class="detail"><td colspan="10">
-    <p class="hint">レ点の根拠：${esc2(r.source)}</p>
+    <p class="hint">レ点の根拠：${esc3(r.source)}</p>
     ${checkGrid(r.items, 'data-d="item"')}
-    <textarea data-d="comment" rows="3">${esc2(r.comment)}</textarea>
+    <textarea data-d="comment" rows="3">${esc3(r.comment)}</textarea>
     <div class="row">
       <button data-d="regen" class="secondary">コメント再生成</button>
       <button data-d="reset" class="secondary">レ点を計画書どおりに戻す</button>
-      <label>担当ヘルパー <input data-d="staff" value="${esc2(r.staff)}" list="staffNames" size="14">${r.staffAuto ? '<span class="hint">（振り分け）</span>' : ""}</label>
-      <datalist id="staffNames">${parseStaff(state.staffText).map((p) => `<option value="${esc2(p.name)}">`).join("")}</datalist>
+      <label>担当ヘルパー <input data-d="staff" value="${esc3(r.staff)}" list="staffNames" size="14">${r.staffAuto ? '<span class="hint">（振り分け）</span>' : ""}</label>
+      <datalist id="staffNames">${parseStaff(state.staffText).map((p) => `<option value="${esc3(p.name)}">`).join("")}</datalist>
       <label><input type="checkbox" data-d="confirmed" ${r.confirmed ? "checked" : ""}> 記録内容を確認した</label>
     </div>
   </td></tr>`;
@@ -2253,7 +2442,7 @@ function cls(status) {
     [STATUS.UNPLANNED]: "ng"
   }[status];
 }
-function esc2(s) {
+function esc3(s) {
   return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 }
 render();

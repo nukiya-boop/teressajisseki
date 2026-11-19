@@ -4,6 +4,7 @@ import { ITEMS, CARE_LEVELS, WEEKDAYS, detectProfile, detectPlanRows, resolveIte
 import { readDocument, normalizeName } from './pdfimport.js';
 import { recordCard } from './form.js';
 import { parseStaff, assignWithBackup } from './assign.js';
+import { helperVisits, kinmuboHtml, ichiranHtml, ichiranCsv } from './monthly.js';
 
 const STORE_KEY = 'teressajisseki:v1';
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -27,6 +28,8 @@ $('#minBuffer').value = state.minBuffer ?? state.buffer ?? 1;
 $('#shiftMax').value = state.shiftMax ?? 0;
 $('#trimEnd').value = state.trimEnd ?? 1;
 $('#maxSpan').value = state.maxSpan ?? '';
+$('#company').value = state.company ?? '';
+$('#orgName').value = state.orgName ?? '';
 
 // 利用者が多いと localStorage（約5MB）に収まらないため、IndexedDB に保存する
 function openDb() {
@@ -507,8 +510,10 @@ function download(name, text, type) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type }));
   a.download = name;
+  document.body.append(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 
 $('#printRecords').addEventListener('click', () => {
@@ -518,7 +523,62 @@ $('#printRecords').addEventListener('click', () => {
   document.body.classList.add('printing');
   window.print();
 });
-window.addEventListener('afterprint', () => document.body.classList.remove('printing'));
+window.addEventListener('afterprint', () => document.body.classList.remove('printing', 'wide'));
+
+// ---- 毎月の書類 ----
+
+function shiftMonth(n) {
+  const [y, m] = monthInput.value.split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  monthInput.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  monthInput.dispatchEvent(new Event('change'));
+}
+$('#prevMonth').addEventListener('click', () => shiftMonth(-1));
+$('#nextMonth').addEventListener('click', () => shiftMonth(1));
+$('#company').addEventListener('change', e => { state.company = e.target.value; save(); });
+$('#orgName').addEventListener('change', e => { state.orgName = e.target.value; save(); });
+
+function printHtml(html, wide = false) {
+  $('#printArea').innerHTML = html;
+  document.body.classList.add('printing');
+  document.body.classList.toggle('wide', wide);
+  window.print();
+}
+// 実績を取り込んだ月は、実績のある訪問だけ
+const monthRows = () => rows.filter(r => r.staffNote !== '実績なし');
+const docArgs = () => ({ ym: monthInput.value, staff: parseStaff(state.staffText), visits: helperVisits(monthRows()), company: state.company ?? '', office: state.orgName ?? '' });
+const ymLabel = () => { const [y, m] = monthInput.value.split('-').map(Number); return `R${y - 2018}.${String(m).padStart(2, '0')}`; };
+
+$('#printAllRecords').addEventListener('click', () => {
+  const list = [...monthRows()].sort((a, b) => (a.userName || '').localeCompare(b.userName || '', 'ja') || a.date.localeCompare(b.date) ||
+    (a.recStart || a.actualStart || a.planStart || '').localeCompare(b.recStart || b.actualStart || b.planStart || ''));
+  if (!list.length) { alert('この月の記録がありません。'); return; }
+  printHtml(list.map(r => recordCard(r, { office: state.office })).join(''));
+});
+$('#printKinmubo').addEventListener('click', () => {
+  const args = docArgs();
+  const who = $('#kbStaff').value;
+  if (who) args.staff = args.staff.filter(p => p.name === who);
+  const html = kinmuboHtml(args);
+  if (!html) { alert('③ にヘルパーを入れてください。'); return; }
+  printHtml(html);
+});
+$('#printIchiran').addEventListener('click', () => {
+  const html = ichiranHtml(docArgs());
+  if (!html.includes('class="name">') ) { alert('③ にヘルパーを入れてください。'); return; }
+  printHtml(html, true);
+});
+$('#csvIchiran').addEventListener('click', () => {
+  download(`勤務体制一覧表_${ymLabel()}.csv`, '\ufeff' + toCSV(ichiranCsv(docArgs())), 'text/csv');
+});
+$('#csvAll').addEventListener('click', () => {
+  const keep = [$('#userFilter').value, $('#statusFilter').value, $('#staffFilter').value, $('#actualOnly').checked, $('#noStaffOnly').checked];
+  $('#userFilter').value = $('#statusFilter').value = $('#staffFilter').value = '';
+  $('#actualOnly').checked = rows.some(r => r.actualStart);
+  $('#noStaffOnly').checked = false;
+  $('#export').click();
+  [$('#userFilter').value, $('#statusFilter').value, $('#staffFilter').value, $('#actualOnly').checked, $('#noStaffOnly').checked] = keep;
+});
 
 function rowKey(r) {
   return `${r.date}|${r.userId}|${r.planStart || r.actualStart}|${r.service}`;
@@ -581,6 +641,9 @@ function render() {
   fillSelect(profileUser, Object.keys(state.profiles).map(id => [id, names[id]]), false);
   drawProfile();
   drawStaff();
+  const [yy, mm] = monthInput.value.split('-').map(Number);
+  $('#monthLabel').textContent = `${yy}年${mm}月（R${yy - 2018}.${mm}）`;
+  fillSelect($('#kbStaff'), docArgs().staff.filter(p => p.from <= `${monthInput.value}-31` && (!p.to || p.to >= `${monthInput.value}-01`)).map(p => [p.name, p.name]), true);
   draw();
 }
 
